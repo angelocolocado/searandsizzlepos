@@ -1,19 +1,28 @@
+import { Button } from "@base-ui/react";
 import { memo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { MenuCategory, MenuItem } from "~/types/menu-category";
 
-const MenuItemCard = memo(function MenuItemCard({ menu }: { menu: MenuItem }) {
+const MenuItemCard = memo(function MenuItemCard({ menu, handleOpen }: { menu: MenuItem, handleOpen: () => void }) {
+
+    const handleClick = () => {
+        
+        handleOpen()
+    }
+
     return (
-        <article
-            aria-label={`${menu.name}, ${menu.status}`}
-            className="flex min-h-[68px] w-[92px] items-center justify-center rounded-sm border bg-background px-2 py-2 text-center text-[13px] leading-4 font-medium shadow-sm"
-        >
-            <span className="line-clamp-3">{menu.name}</span>
-        </article>
+        <Button onClick={handleClick}>
+            <article
+                aria-label={`${menu.name}, ${menu.status}`}
+                className="flex min-h-[68px] w-[92px] items-center justify-center rounded-sm border bg-background px-2 py-2 text-center text-[13px] leading-4 font-medium shadow-sm"
+            >
+                <span className="line-clamp-3">{menu.name}</span>
+            </article>
+        </Button>
     );
 });
 
-export const MenuCategoryBrowser = memo(function MenuCategoryBrowser({ category }: { category?: MenuCategory }) {
+export const MenuCategoryBrowser = memo(function MenuCategoryBrowser({ category, handleOpen }: { category?: MenuCategory, handleOpen: () => void }) {
     if (!category) {
         return (
             <section className="mt-3 flex min-h-32 items-center justify-center rounded-md border bg-card px-4 text-sm text-muted-foreground">
@@ -62,7 +71,7 @@ export const MenuCategoryBrowser = memo(function MenuCategoryBrowser({ category 
                         {recipeCategory.menus.length > 0 ? (
                             <div className="grid grid-cols-[repeat(auto-fill,92px)] gap-3">
                                 {recipeCategory.menus.map((menu) => (
-                                    <MenuItemCard key={menu.id} menu={menu} />
+                                    <MenuItemCard handleOpen={handleOpen} key={menu.id} menu={menu} />
                                 ))}
                             </div>
                         ) : (

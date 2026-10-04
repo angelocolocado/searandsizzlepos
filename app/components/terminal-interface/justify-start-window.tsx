@@ -53,7 +53,7 @@ export function MainView({ handleProccessPanelToggle, isProccessPanelOpen, menuC
                     <OrderRail orders={orders.filter((order) => order.type === "Take out")} />
                 </TabsContent>
             </Tabs>
-            <MenuCategoryBrowser category={menuCategory} />
+            <MenuCategoryBrowser handleOpen={handleProccessPanelToggle} category={menuCategory} />
         </main>
     
     </>

@@ -6,6 +6,9 @@ type ComponentProps = {
 }
 
 export function ProccessOrderPanel({ handleClose }: ComponentProps){
+
+    
+
     return (
         <aside id="process-order-panel" className="flex h-full w-full min-w-0 flex-col border-b border-l bg-background">
             <div className="flex py-4 shrink-0 items-center justify-between border-b px-4">

@@ -10,7 +10,7 @@ type TerminalInterfaceProps = {
 export default function TerminalInterface({ menuCategory }: TerminalInterfaceProps){
 
     const [isPrcOrderPanelOpen, setIsPrcOrderPanelOpen] = useState(false)
-    const handleProccessPanelToggle = () => setIsPrcOrderPanelOpen((isOpen) => !isOpen)
+    const handleProccessPanelToggle = () => setIsPrcOrderPanelOpen(true)
 
     return <>
         <div className="flex h-screen w-full min-w-0 overflow-hidden animate-in fade-in duration-500 ease-out">
