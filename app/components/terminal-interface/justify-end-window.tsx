@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Info, Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
@@ -10,12 +10,42 @@ import {
 } from "~/components/ui/dialog";
 import { SlideToConfirm } from "~/components/lightswind/slide-to-confirm";
 import type { OrderLine } from "~/types/menu-category";
+import { toast } from "sonner";
+import { useFetcher } from "react-router";
+import type { MenuItem } from "~/types/menu-category";
+import type { clientAction } from "~/routes/cart/fetch-cartdata-route";
+
+function isMenuItem(value: unknown): value is MenuItem {
+    if (typeof value !== "object" || value === null) return false;
+
+    const menu = value as Record<string, unknown>;
+    return (
+        typeof menu.id === "string" &&
+        typeof menu.name === "string" &&
+        typeof menu.selling_price === "number" &&
+        (typeof menu.description === "string" || menu.description === null) &&
+        typeof menu.status === "string" &&
+        Array.isArray(menu.modifiers) &&
+        menu.modifiers.every((modifier: unknown) => {
+            if (typeof modifier !== "object" || modifier === null) return false;
+            const item = modifier as Record<string, unknown>;
+            return (
+                typeof item.id === "string" &&
+                typeof item.name === "string" &&
+                typeof item.price === "number" &&
+                typeof item.category === "string"
+            );
+        })
+    );
+}
 
 type ComponentProps = {
     handleClose: () => void
     cart: OrderLine[]
     cartError: string | null
+    onMenusLoaded: (menus: MenuItem[]) => void
     onQuantityChange: (menuId: string, quantity: number) => void
+    onModifierQuantityChange: (menuId: string, modifierId: string, quantity: number) => void
     onRemoveMenu: (menuId: string) => void
 }
 
@@ -23,22 +53,95 @@ export function ProccessOrderPanel({
     handleClose,
     cart,
     cartError,
+    onMenusLoaded,
     onQuantityChange,
+    onModifierQuantityChange,
     onRemoveMenu,
 }: ComponentProps) {
+    const fetcher = useFetcher<typeof clientAction>()
     const [infoMenuId, setInfoMenuId] = useState<string | null>(null)
     const [removalLine, setRemovalLine] = useState<OrderLine | null>(null)
     const infoMenu = cart.find((line) => line.menuId === infoMenuId)?.menu
     const itemCount = cart.reduce((count, line) => count + line.quantity, 0)
     const total = cart.reduce(
-        (sum, line) => sum + line.menu.selling_price * line.quantity,
+        (sum, line) =>
+            sum +
+            line.menu.selling_price * line.quantity +
+            line.modifiers.reduce(
+                (modifierTotal, modifier) =>
+                    modifierTotal + modifier.modifier.price * modifier.quantity,
+                0
+            ),
         0
     )
+    const lineTotal = (line: OrderLine) =>
+        line.menu.selling_price * line.quantity +
+        line.modifiers.reduce(
+            (modifierTotal, modifier) =>
+                modifierTotal + modifier.modifier.price * modifier.quantity,
+            0
+        )
     const formatPrice = (price: number) =>
         new Intl.NumberFormat("en-PH", {
             style: "currency",
             currency: "PHP",
         }).format(price)
+
+    useEffect(() => {
+        if (!fetcher.data) return;
+
+        if ("error" in fetcher.data && typeof fetcher.data.error === "string") {
+            toast.error(fetcher.data.error);
+            return;
+        }
+
+        if (
+            "items" in fetcher.data &&
+            Array.isArray(fetcher.data.items) &&
+            fetcher.data.items.every(isMenuItem)
+        ) {
+            onMenusLoaded(fetcher.data.items);
+            return;
+        }
+
+        toast.error("The backend returned invalid menu details.");
+    }, [fetcher.data, onMenusLoaded])
+
+    useEffect(() => {
+        try {
+            const savedOrder = window.localStorage.getItem("searsizzle-pos-order-cart");
+            const orderData: unknown = savedOrder ? JSON.parse(savedOrder) : [];
+
+            if (
+                !Array.isArray(orderData) ||
+                !orderData.every(
+                    (line: unknown) =>
+                        typeof line === "object" &&
+                        line !== null &&
+                        "menu_id" in line &&
+                        typeof line.menu_id === "string" &&
+                        "quantity" in line &&
+                        typeof line.quantity === "number" &&
+                        Number.isInteger(line.quantity) &&
+                        line.quantity >= 1
+                )
+            ) {
+                throw new Error("Saved cart entries must have a menu_id and a positive quantity.");
+            }
+
+            const menuIds = [...new Set(orderData.map((line) => line.menu_id))];
+            if (menuIds.length === 0) return;
+
+            fetcher.submit(
+                { menu_ids: JSON.stringify(menuIds) },
+                { method: "POST", action: "/cart" }
+            );
+        } catch (error) {
+            console.error("Unable to read saved cart data.", error);
+            toast.error("Invalid cart data. Cart has been reset.");
+            window.localStorage.setItem("searsizzle-pos-order-cart", "[]");
+        }
+    }, [])
 
     return (
         <aside id="process-order-panel" className="flex h-full w-full min-w-0 flex-col border-l bg-background">
@@ -126,10 +229,70 @@ export function ProccessOrderPanel({
                                 </Button>
                             </div>
                         </div>
+                        {line.menu.modifiers.length > 0 && (
+                            <section className="mt-3 space-y-2 border-t pt-3" aria-label={`${line.menu.name} modifiers`}>
+                                <h4 className="text-xs font-semibold text-muted-foreground">Modifiers</h4>
+                                {line.menu.modifiers.map((modifier) => {
+                                    const selected = line.modifiers.find(
+                                        (item) => item.modifierId === modifier.id
+                                    );
+                                    const quantity = selected?.quantity ?? 0;
+                                    return (
+                                        <div key={modifier.id} className="flex min-w-0 items-center justify-between gap-2 rounded-lg bg-muted/50 px-2.5 py-2">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-xs font-medium">{modifier.name}</p>
+                                                <p className="text-[11px] text-muted-foreground">
+                                                    {formatPrice(modifier.price)} each
+                                                </p>
+                                            </div>
+                                            <div className="inline-flex shrink-0 items-center gap-1.5">
+                                                <Button
+                                                    type="button"
+                                                    size="icon-xs"
+                                                    variant="outline"
+                                                    aria-label={`Decrease ${modifier.name} quantity`}
+                                                    disabled={quantity === 0}
+                                                    onClick={() => onModifierQuantityChange(line.menuId, modifier.id, quantity - 1)}
+                                                >
+                                                    <Minus />
+                                                </Button>
+                                                <span className="min-w-5 text-center text-xs font-semibold tabular-nums" aria-live="polite">
+                                                    {quantity}
+                                                </span>
+                                                <Button
+                                                    type="button"
+                                                    size="icon-xs"
+                                                    variant="outline"
+                                                    aria-label={`Increase ${modifier.name} quantity`}
+                                                    onClick={() => onModifierQuantityChange(line.menuId, modifier.id, quantity + 1)}
+                                                >
+                                                    <Plus />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </section>
+                        )}
+                        {line.modifiers.length > 0 && (
+                            <section className="mt-3 space-y-1.5 border-t pt-3" aria-label="Selected modifiers">
+                                <h4 className="text-xs font-semibold text-muted-foreground">Selected modifiers</h4>
+                                {line.modifiers.map((selected) => (
+                                    <div key={selected.modifierId} className="flex justify-between gap-2 text-xs">
+                                        <span className="min-w-0 truncate">
+                                            {selected.modifier.name} <span className="text-muted-foreground">× {selected.quantity}</span>
+                                        </span>
+                                        <span className="shrink-0 font-medium tabular-nums">
+                                            {formatPrice(selected.modifier.price * selected.quantity)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </section>
+                        )}
                         <div className="mt-3 flex justify-between border-t pt-2 text-xs">
                             <span className="text-muted-foreground">Line total</span>
                             <span className="font-semibold tabular-nums">
-                                {formatPrice(line.menu.selling_price * line.quantity)}
+                                {formatPrice(lineTotal(line))}
                             </span>
                         </div>
                     </article>

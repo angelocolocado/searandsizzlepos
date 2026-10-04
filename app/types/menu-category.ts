@@ -14,10 +14,19 @@ export type MenuItem = {
     modifiers: MenuModifier[];
 };
 
+export type CartMenuResponse = {
+    items: MenuItem[];
+};
+
 export type OrderLine = {
     menuId: MenuItem["id"];
     menu: MenuItem;
     quantity: number;
+    modifiers: {
+        modifierId: MenuModifier["id"];
+        modifier: MenuModifier;
+        quantity: number;
+    }[];
 };
 
 export type RecipeCategory = {

@@ -7,7 +7,9 @@ export default [
         route("pos/menu/:categoryId", "routes/menu-category-route.tsx")
     ]),
 
-    route('/sidebar', 'routes/sidebar-route.tsx')
+    route('/sidebar', 'routes/sidebar-route.tsx'),
+    route('/cart', 'routes/cart/fetch-cartdata-route.tsx'),
+    route('/checkout', 'routes/checkout/checkout-route.tsx'),
     
 
 

@@ -1,6 +1,6 @@
 import { ProccessOrderPanel } from "./justify-end-window";
 import { MainView } from "./justify-start-window";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { MenuCategory, MenuItem, OrderLine } from "~/types/menu-category";
 
 type TerminalInterfaceProps = {
@@ -9,6 +9,12 @@ type TerminalInterfaceProps = {
 
 type StoredOrderLine = {
     menu_id: string;
+    quantity: number;
+    modifiers?: StoredModifierQuantity[];
+}
+
+type StoredModifierQuantity = {
+    modifier_id: string;
     quantity: number;
 }
 
@@ -22,8 +28,29 @@ function isStoredOrderLine(value: unknown): value is StoredOrderLine {
         typeof line.menu_id === "string" &&
         typeof line.quantity === "number" &&
         Number.isInteger(line.quantity) &&
-        line.quantity >= 1
+        line.quantity >= 1 &&
+        (line.modifiers === undefined ||
+            (Array.isArray(line.modifiers) &&
+                line.modifiers.every((modifier: unknown) => {
+                    if (typeof modifier !== "object" || modifier === null) return false;
+                    const selectedModifier = modifier as Record<string, unknown>;
+                    return (
+                        typeof selectedModifier.modifier_id === "string" &&
+                        typeof selectedModifier.quantity === "number" &&
+                        Number.isInteger(selectedModifier.quantity) &&
+                        selectedModifier.quantity >= 0
+                    );
+                })))
     );
+}
+
+function withoutZeroModifiers(line: StoredOrderLine): StoredOrderLine {
+    const modifiers = line.modifiers?.filter((modifier) => modifier.quantity > 0);
+    return {
+        menu_id: line.menu_id,
+        quantity: line.quantity,
+        ...(modifiers?.length ? { modifiers } : {}),
+    };
 }
 
 export default function TerminalInterface({ menuCategory }: TerminalInterfaceProps){
@@ -34,6 +61,13 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     const [isCartLoaded, setIsCartLoaded] = useState(false)
     const [cartError, setCartError] = useState<string | null>(null)
 
+    const handleMenusLoaded = useCallback((menus: MenuItem[]) => {
+        setMenusById((current) => ({
+            ...current,
+            ...Object.fromEntries(menus.map((menu) => [menu.id, menu])),
+        }));
+    }, [])
+
     useEffect(() => {
         try {
             const storedCart = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -42,7 +76,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                 if (!Array.isArray(parsedCart) || !parsedCart.every(isStoredOrderLine)) {
                     throw new Error("Saved order data has an invalid format.");
                 }
-                setOrder(parsedCart);
+                setOrder(parsedCart.map(withoutZeroModifiers));
             }
         } catch (error) {
             console.error("Unable to load the saved order cart.", error);
@@ -79,7 +113,19 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     const cart: OrderLine[] = order.flatMap((line) => {
         const menu = menusById[line.menu_id];
         return menu
-            ? [{ menuId: line.menu_id, menu, quantity: line.quantity }]
+            ? [{
+                menuId: line.menu_id,
+                menu,
+                quantity: line.quantity,
+                modifiers: (line.modifiers ?? []).flatMap((selectedModifier) => {
+                    const modifier = menu.modifiers.find(
+                        (item) => item.id === selectedModifier.modifier_id
+                    );
+                    return modifier
+                        ? [{ modifierId: modifier.id, modifier, quantity: selectedModifier.quantity }]
+                        : [];
+                }),
+            }]
             : [];
     })
 
@@ -104,6 +150,31 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             currentOrder.map((line) =>
                 line.menu_id === menuId ? { ...line, quantity } : line
             )
+        )
+    }
+
+    const updateModifierQuantity = (
+        menuId: string,
+        modifierId: string,
+        quantity: number
+    ) => {
+        setOrder((currentOrder) =>
+            currentOrder.map((line) => {
+                if (line.menu_id !== menuId) return line;
+
+                const modifiers = (line.modifiers ?? []).filter(
+                    (modifier) => modifier.modifier_id !== modifierId
+                );
+                if (quantity > 0) {
+                    modifiers.push({ modifier_id: modifierId, quantity });
+                }
+
+                return {
+                    menu_id: line.menu_id,
+                    quantity: line.quantity,
+                    ...(modifiers.length ? { modifiers } : {}),
+                };
+            })
         )
     }
 
@@ -139,7 +210,9 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     handleClose={() => setIsPrcOrderPanelOpen(false)}
                     cart={cart}
                     cartError={cartError}
+                    onMenusLoaded={handleMenusLoaded}
                     onQuantityChange={updateQuantity}
+                    onModifierQuantityChange={updateModifierQuantity}
                     onRemoveMenu={removeMenu}
                 />
             </div>
