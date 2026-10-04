@@ -44,6 +44,16 @@ export type CheckoutPrepareResponse = {
     totalAmount: number;
 };
 
+export type CheckoutSuccessResponse = {
+    status: "success";
+    totalAmount: number;
+    payment_method: "cash" | "cashless";
+    payment: {
+        status: "accepted";
+        amount: number;
+    };
+};
+
 export type RecipeCategory = {
     id: number;
     category: string;

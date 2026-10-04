@@ -182,6 +182,16 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         setOrder((currentOrder) => currentOrder.filter((line) => line.menu_id !== menuId))
     }
 
+    const clearOrderAfterCheckout = useCallback(() => {
+        setOrder([]);
+        try {
+            window.localStorage.setItem(CART_STORAGE_KEY, "[]");
+        } catch (error) {
+            console.error("Checkout succeeded, but the saved order could not be cleared.", error);
+            setCartError("Checkout succeeded, but the saved order could not be cleared.");
+        }
+    }, [])
+
     return <>
         <div className="relative flex h-screen w-full min-w-0 overflow-hidden animate-in fade-in duration-500 ease-out">
             <div className="min-w-0 flex-1">
@@ -214,6 +224,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     onQuantityChange={updateQuantity}
                     onModifierQuantityChange={updateModifierQuantity}
                     onRemoveMenu={removeMenu}
+                    onCheckoutComplete={clearOrderAfterCheckout}
                 />
             </div>
         </div>

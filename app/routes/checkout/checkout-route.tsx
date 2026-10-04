@@ -4,6 +4,7 @@ import { data } from "react-router";
 import type {
     CheckoutCartLine,
     CheckoutPrepareResponse,
+    CheckoutSuccessResponse,
 } from "~/types/menu-category";
 
 function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
@@ -41,20 +42,50 @@ function isCheckoutPrepareResponse(value: unknown): value is CheckoutPrepareResp
     );
 }
 
+function isCheckoutSuccessResponse(value: unknown): value is CheckoutSuccessResponse {
+    if (typeof value !== "object" || value === null) return false;
+
+    const response = value as Record<string, unknown>;
+    if (typeof response.payment !== "object" || response.payment === null) return false;
+
+    const payment = response.payment as Record<string, unknown>;
+    return (
+        response.status === "success" &&
+        typeof response.totalAmount === "number" &&
+        Number.isFinite(response.totalAmount) &&
+        response.totalAmount >= 0 &&
+        (response.payment_method === "cash" || response.payment_method === "cashless") &&
+        payment.status === "accepted" &&
+        typeof payment.amount === "number" &&
+        Number.isFinite(payment.amount) &&
+        payment.amount >= 0
+    );
+}
+
 export async function clientAction({ request }: Route.ClientActionArgs) {
     if (request.method !== "POST") {
         return data({ error: "Only POST requests are supported." }, { status: 405 });
     }
 
     const formData = await request.formData();
-    if (formData.get("intent") !== "handle_recalculate") {
+    const formIntent = formData.get("intent");
+    if (formIntent !== "handle_recalculate" && formIntent !== "handle_checkout") {
         return data({ error: "Unsupported checkout action." }, { status: 400 });
     }
 
     const cartField = formData.get("cart");
+    if (typeof cartField !== "string") {
+        return data({ error: "Cart data is required for checkout." }, { status: 400 });
+    }
+
     const cartSignature = formData.get("cart_signature");
-    if (typeof cartField !== "string" || typeof cartSignature !== "string") {
-        return data({ error: "Cart data is required to prepare checkout." }, { status: 400 });
+    const paymentMethod = formData.get("payment_method");
+    if (
+        formIntent === "handle_checkout" &&
+        paymentMethod !== "cash" &&
+        paymentMethod !== "cashless"
+    ) {
+        return data({ error: "A valid payment method is required to complete checkout." }, { status: 400 });
     }
 
     let submittedCart: unknown;
@@ -86,6 +117,28 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     });
 
     try {
+        if (formIntent === "handle_checkout") {
+            const response = await api.post<unknown>("v1/checkout", {
+                intent: "checkout",
+                payment_method: paymentMethod,
+                cart,
+            });
+
+            if (
+                !isCheckoutSuccessResponse(response.data) ||
+                response.data.payment_method !== paymentMethod ||
+                response.data.payment.amount !== response.data.totalAmount
+            ) {
+                throw new Error("Backend returned an invalid checkout success response.");
+            }
+
+            return data({ checkoutComplete: true, checkout: response.data });
+        }
+
+        if (typeof cartSignature !== "string") {
+            return data({ error: "A cart signature is required to prepare checkout." }, { status: 400 });
+        }
+
         const response = await api.post<unknown>("v1/checkout", {
             intent: "prepare",
             cart,
@@ -100,9 +153,18 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
             cartSignature,
         });
     } catch (error) {
-        console.error("Failed to prepare checkout with the backend.", error);
+        console.error(
+            formIntent === "handle_checkout"
+                ? "Failed to complete checkout with the backend."
+                : "Failed to prepare checkout with the backend.",
+            error
+        );
         return data(
-            { error: "Could not calculate the order total. Please try again." },
+            {
+                error: formIntent === "handle_checkout"
+                    ? "Could not complete checkout. Please try again."
+                    : "Could not calculate the order total. Please try again.",
+            },
             { status: 502 }
         );
     }

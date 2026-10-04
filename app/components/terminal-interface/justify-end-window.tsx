@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
-import { Info, Minus, Plus, ShoppingBag, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+    Info,
+    Minus,
+    Plus,
+    ShoppingBag,
+    Trash2,
+    X,
+} from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
     Dialog,
@@ -15,6 +22,7 @@ import { useFetcher } from "react-router";
 import type { CheckoutCartLine, MenuItem } from "~/types/menu-category";
 import type { clientAction } from "~/routes/cart/fetch-cartdata-route";
 import type { clientAction as checkoutClientAction } from "~/routes/checkout/checkout-route";
+import { CheckoutReviewDialog } from "./checkout-review-dialog";
 
 function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
     if (typeof value !== "object" || value === null) return false;
@@ -72,6 +80,7 @@ type ComponentProps = {
     onQuantityChange: (menuId: string, quantity: number) => void
     onModifierQuantityChange: (menuId: string, modifierId: string, quantity: number) => void
     onRemoveMenu: (menuId: string) => void
+    onCheckoutComplete: () => void
 }
 
 export function ProccessOrderPanel({
@@ -82,11 +91,22 @@ export function ProccessOrderPanel({
     onQuantityChange,
     onModifierQuantityChange,
     onRemoveMenu,
+    onCheckoutComplete,
 }: ComponentProps) {
     const fetcher = useFetcher<typeof clientAction>()
     const checkoutFetcher = useFetcher<typeof checkoutClientAction>()
+    const checkoutToastRef = useRef<{
+        intent: "prepare" | "checkout";
+        resolve: (successMessage?: string) => void;
+        reject: (error: Error) => void;
+    } | null>(null)
     const [infoMenuId, setInfoMenuId] = useState<string | null>(null)
     const [removalLine, setRemovalLine] = useState<OrderLine | null>(null)
+    const [checkoutOpen, setCheckoutOpen] = useState(false)
+    const [preparedTotal, setPreparedTotal] = useState<{
+        amount: number;
+        cartSignature: string;
+    } | null>(null)
     const infoMenu = cart.find((line) => line.menuId === infoMenuId)?.menu
     const itemCount = cart.reduce((count, line) => count + line.quantity, 0)
     const total = cart.reduce(
@@ -120,6 +140,9 @@ export function ProccessOrderPanel({
             style: "currency",
             currency: "PHP",
         }).format(price)
+    const backendTotal = preparedTotal?.cartSignature === cartSignature
+        ? preparedTotal.amount
+        : null
 
     const handlePrepareCheckout = () => {
         if (checkoutFetcher.state !== "idle") return;
@@ -148,6 +171,17 @@ export function ProccessOrderPanel({
                     })),
             })))
 
+            const checkoutPromise = new Promise<string | void>((resolve, reject) => {
+                checkoutToastRef.current = { intent: "prepare", resolve, reject };
+            });
+            toast.promise(checkoutPromise, {
+                loading: "Preparing order...",
+                error: (error) =>
+                    error instanceof Error
+                        ? error.message
+                        : "Could not prepare the order. Please try again.",
+            });
+
             checkoutFetcher.submit(
                 {
                     intent: "handle_recalculate",
@@ -158,31 +192,122 @@ export function ProccessOrderPanel({
             );
         } catch (error) {
             console.error("Unable to prepare checkout from the saved cart.", error);
-            toast.error("Could not read the saved order. Please review the cart and try again.");
+            const pendingCheckout = checkoutToastRef.current;
+            checkoutToastRef.current = null;
+            pendingCheckout?.reject(
+                new Error("Could not read the saved order. Please review the cart and try again.")
+            );
+            if (!pendingCheckout) {
+                toast.error("Could not read the saved order. Please review the cart and try again.");
+            }
         }
     }
 
     useEffect(() => {
         const result = checkoutFetcher.data;
-        if (!result) return;
+        const pendingCheckout = checkoutToastRef.current;
+        if (!result || !pendingCheckout || checkoutFetcher.state !== "idle") return;
 
         if ("error" in result && typeof result.error === "string") {
-            toast.error(result.error);
+            checkoutToastRef.current = null;
+            pendingCheckout.reject(new Error(result.error));
             return;
         }
 
-        if (
+        if (pendingCheckout.intent === "prepare" &&
             "totalAmount" in result &&
             typeof result.totalAmount === "number" &&
             Number.isFinite(result.totalAmount) &&
             typeof result.cartSignature === "string"
         ) {
-            toast.success("Order prepared successfully.");
+            if (result.cartSignature !== cartSignature) {
+                checkoutToastRef.current = null;
+                pendingCheckout.reject(new Error("The order changed while preparing checkout. Please try again."));
+                return;
+            }
+
+            setPreparedTotal({
+                amount: result.totalAmount,
+                cartSignature: result.cartSignature,
+            });
+            setCheckoutOpen(true);
+            checkoutToastRef.current = null;
+            pendingCheckout.resolve();
             return;
         }
 
-        toast.error("The checkout service returned an invalid total.");
-    }, [checkoutFetcher.data])
+        if (
+            pendingCheckout.intent === "checkout" &&
+            "checkoutComplete" in result &&
+            result.checkoutComplete &&
+            "checkout" in result
+        ) {
+            const checkout = result.checkout;
+            onCheckoutComplete();
+            setCheckoutOpen(false);
+            checkoutToastRef.current = null;
+            pendingCheckout.resolve(
+                `Checkout successful. ${formatPrice(checkout.payment.amount)} paid via ${checkout.payment_method}.`
+            );
+            return;
+        }
+
+        checkoutToastRef.current = null;
+        pendingCheckout.reject(new Error(
+            pendingCheckout.intent === "prepare"
+                ? "The checkout service returned an invalid total."
+                : "The checkout service returned an invalid response."
+        ));
+    }, [checkoutFetcher.data, checkoutFetcher.state, cartSignature, formatPrice, onCheckoutComplete])
+
+    const handleCheckoutPayment = (paymentMethod: "cash" | "cashless") => {
+        if (checkoutFetcher.state !== "idle") return;
+
+        try {
+            const savedCart = window.localStorage.getItem("searsizzle-pos-order-cart");
+            const cartData: unknown = savedCart ? JSON.parse(savedCart) : [];
+
+            if (
+                !Array.isArray(cartData) ||
+                cartData.length === 0 ||
+                !cartData.every(isCheckoutCartLine)
+            ) {
+                toast.error("The saved order is invalid. Review the order and try again.");
+                return;
+            }
+
+            const checkoutPromise = new Promise<string | void>((resolve, reject) => {
+                checkoutToastRef.current = { intent: "checkout", resolve, reject };
+            });
+            toast.promise(checkoutPromise, {
+                loading: "Processing payment...",
+                success: (message) => message || "Checkout completed successfully.",
+                error: (error) =>
+                    error instanceof Error
+                        ? error.message
+                        : "Could not complete checkout. Please try again.",
+            });
+
+            checkoutFetcher.submit(
+                {
+                    intent: "handle_checkout",
+                    payment_method: paymentMethod,
+                    cart: JSON.stringify(cartData),
+                },
+                { method: "POST", action: "/checkout" }
+            );
+        } catch (error) {
+            console.error("Unable to submit checkout from the saved cart.", error);
+            const pendingCheckout = checkoutToastRef.current;
+            checkoutToastRef.current = null;
+            pendingCheckout?.reject(
+                new Error("Could not read the saved order. Please review the cart and try again.")
+            );
+            if (!pendingCheckout) {
+                toast.error("Could not read the saved order. Please review the cart and try again.");
+            }
+        }
+    }
 
     useEffect(() => {
         if (!fetcher.data) return;
@@ -419,9 +544,21 @@ export function ProccessOrderPanel({
                     {checkoutFetcher.state !== "idle" ? "Preparing order..." : "Process payment"}
                 </Button>
                 <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                    Payment checkout is not connected yet.
+                    Your total is verified by the checkout service before payment.
                 </p>
             </footer>
+
+            <CheckoutReviewDialog
+                key={cartSignature}
+                open={checkoutOpen}
+                onOpenChange={setCheckoutOpen}
+                cart={cart}
+                itemCount={itemCount}
+                totalAmount={backendTotal}
+                formatPrice={formatPrice}
+                isSubmitting={checkoutFetcher.state !== "idle" && checkoutOpen}
+                onProcessPayment={handleCheckoutPayment}
+            />
 
             <Dialog open={Boolean(infoMenu)} onOpenChange={(open) => !open && setInfoMenuId(null)}>
                 {infoMenu && (
