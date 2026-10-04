@@ -54,6 +54,23 @@ export type CheckoutSuccessResponse = {
     };
 };
 
+export type KitchenOrder = {
+    orderNumber: number;
+    itemCount: number;
+    elapsed: string;
+    type: "Dine in" | "Take out";
+    payment_status: "paid" | "pay_later";
+    totalPayment?: number;
+    order: {
+        name: string;
+        quantity: number;
+        modifiers: {
+            name: string;
+            quantity: number;
+        }[];
+    }[];
+};
+
 export type RecipeCategory = {
     id: number;
     category: string;

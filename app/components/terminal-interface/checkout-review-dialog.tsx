@@ -21,7 +21,11 @@ type ComponentProps = {
     totalAmount: number | null
     formatPrice: (price: number) => string
     isSubmitting: boolean
-    onProcessPayment: (paymentMethod: PaymentMethod) => void
+    onProcessPayment: (
+        paymentMethod: PaymentMethod,
+        orderType: "dine_in" | "take_out",
+        payLater: boolean
+    ) => void
 }
 
 export function CheckoutReviewDialog({
@@ -36,6 +40,7 @@ export function CheckoutReviewDialog({
 }: ComponentProps) {
     const [orderType, setOrderType] = useState<OrderType>("dine-in")
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null)
+    const [payLater, setPayLater] = useState(false)
     const [cashReceived, setCashReceived] = useState("")
 
     const cashReceivedAmount = Number(cashReceived || 0)
@@ -63,10 +68,11 @@ export function CheckoutReviewDialog({
     }
 
     const processPayment = () => {
-        if (totalAmount === null || paymentMethod === null) return;
-        if (paymentMethod === "cash" && cashReceivedAmount < totalAmount) return;
+        if (paymentMethod === null) return;
+        if (totalAmount === null) return;
+        if (!payLater && paymentMethod === "cash" && totalAmount !== null && cashReceivedAmount < totalAmount) return;
 
-        onProcessPayment(paymentMethod);
+        onProcessPayment(paymentMethod, orderType === "dine-in" ? "dine_in" : "take_out", payLater);
     }
 
     return (
@@ -129,7 +135,9 @@ export function CheckoutReviewDialog({
 
                     <section className="min-w-0 p-4 sm:p-5 lg:p-6">
                         <DialogHeader className="mb-4 text-left">
-                            <DialogTitle className="text-lg">Complete your order</DialogTitle>
+                            <DialogTitle className="text-lg">
+                                Complete your order
+                            </DialogTitle>
                             <DialogDescription>
                                 Choose dine-in or takeout, then select how you’ll pay.
                             </DialogDescription>
@@ -155,6 +163,21 @@ export function CheckoutReviewDialog({
                                 ))}
                             </div>
                         </div>
+
+                        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border p-3.5">
+                            <input
+                                type="checkbox"
+                                checked={payLater}
+                                onChange={(event) => setPayLater(event.currentTarget.checked)}
+                                className="mt-0.5 size-4 accent-green-600"
+                            />
+                            <span>
+                                <span className="block text-sm font-semibold">Record as pay later</span>
+                                <span className="mt-0.5 block text-xs text-muted-foreground">
+                                    Collect payment after the order is prepared.
+                                </span>
+                            </span>
+                        </label>
 
                         <div className="mt-5">
                             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -200,7 +223,7 @@ export function CheckoutReviewDialog({
                                     {totalAmount === null ? "—" : formatPrice(totalAmount)}
                                 </span>
                             </div>
-                            {paymentMethod === "cash" && (
+                            {paymentMethod === "cash" && !payLater && (
                                 <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3">
                                     <span className="text-sm text-muted-foreground">Change</span>
                                     <span className="text-sm font-semibold tabular-nums">
@@ -211,7 +234,7 @@ export function CheckoutReviewDialog({
                         </div>
                     </section>
 
-                    {paymentMethod === "cash" ? (
+                    {paymentMethod === "cash" && !payLater && totalAmount !== null ? (
                         <section className="flex min-w-0 flex-col border-t bg-muted/20 p-4 sm:p-5 md:col-start-2 lg:col-start-auto lg:border-t-0 lg:border-l lg:p-6">
                             <div className="mb-3">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -264,12 +287,18 @@ export function CheckoutReviewDialog({
                                 {paymentMethod === "cashless" ? <CreditCard /> : <Banknote />}
                             </span>
                             <p className="font-semibold">
-                                {paymentMethod === "cashless" ? "Cashless payment" : "Select a payment method"}
+                                {payLater
+                                    ? "Payment will be collected later"
+                                    : paymentMethod === "cashless"
+                                        ? "Cashless payment"
+                                        : "Select a payment method"}
                             </p>
                             <p className="mt-1 max-w-52 text-sm text-muted-foreground">
-                                {paymentMethod === "cashless"
-                                    ? "No cash calculator is needed for this payment."
-                                    : "Choose cash to enter the amount received."}
+                                {payLater
+                                    ? "The kitchen order will be recorded as unpaid."
+                                    : paymentMethod === "cashless"
+                                        ? "No cash calculator is needed for this payment."
+                                        : "Choose cash to enter the amount received."}
                             </p>
                         </section>
                     )}
@@ -291,11 +320,11 @@ export function CheckoutReviewDialog({
                                 isSubmitting ||
                                 totalAmount === null ||
                                 paymentMethod === null ||
-                                (paymentMethod === "cash" && cashReceivedAmount < totalAmount)
+                                (!payLater && paymentMethod === "cash" && totalAmount !== null && cashReceivedAmount < totalAmount)
                             }
                             onClick={processPayment}
                         >
-                            {isSubmitting ? "Processing..." : "Process to payment"}
+                            {isSubmitting ? "Processing..." : payLater ? "Place pay-later order" : "Process to payment"}
                         </Button>
                     </div>
                 </div>

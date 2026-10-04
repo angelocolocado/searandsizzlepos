@@ -1,4 +1,5 @@
 import api from "~/lib/axios";
+import axios from "axios";
 import type { Route } from "./+types/checkout-route";
 import { data } from "react-router";
 import type {
@@ -62,6 +63,24 @@ function isCheckoutSuccessResponse(value: unknown): value is CheckoutSuccessResp
     );
 }
 
+function getCheckoutErrorMessage(error: unknown, fallback: string) {
+    if (!axios.isAxiosError(error)) return fallback;
+
+    const responseData: unknown = error.response?.data;
+    if (typeof responseData !== "object" || responseData === null) return fallback;
+
+    const body = responseData as Record<string, unknown>;
+    const validationMessages =
+        typeof body.errors === "object" && body.errors !== null
+            ? Object.values(body.errors as Record<string, unknown>)
+                .flatMap((messages) => Array.isArray(messages) ? messages : [messages])
+                .filter((message): message is string => typeof message === "string")
+            : [];
+
+    if (validationMessages.length > 0) return validationMessages.join(" ");
+    return typeof body.message === "string" ? body.message : fallback;
+}
+
 export async function clientAction({ request }: Route.ClientActionArgs) {
     if (request.method !== "POST") {
         return data({ error: "Only POST requests are supported." }, { status: 405 });
@@ -80,12 +99,20 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
 
     const cartSignature = formData.get("cart_signature");
     const paymentMethod = formData.get("payment_method");
+    const orderType = formData.get("order_type");
     if (
         formIntent === "handle_checkout" &&
         paymentMethod !== "cash" &&
         paymentMethod !== "cashless"
     ) {
         return data({ error: "A valid payment method is required to complete checkout." }, { status: 400 });
+    }
+    if (
+        formIntent === "handle_checkout" &&
+        orderType !== "dine_in" &&
+        orderType !== "take_out"
+    ) {
+        return data({ error: "A valid order type is required to complete checkout." }, { status: 400 });
     }
 
     let submittedCart: unknown;
@@ -118,11 +145,16 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
 
     try {
         if (formIntent === "handle_checkout") {
-            const response = await api.post<unknown>("v1/checkout", {
+            const payLater = formData.get("pay_later") === "true";
+            const response = await api.post<unknown>(
+                payLater ? "v1/pay-later" : "v1/checkout",
+                {
                 intent: "checkout",
+                order_type: orderType,
                 payment_method: paymentMethod,
                 cart,
-            });
+                }
+            );
 
             if (
                 !isCheckoutSuccessResponse(response.data) ||
@@ -132,7 +164,11 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
                 throw new Error("Backend returned an invalid checkout success response.");
             }
 
-            return data({ checkoutComplete: true, checkout: response.data });
+            return data({
+                checkoutComplete: true,
+                checkout: response.data,
+                payLater,
+            });
         }
 
         if (typeof cartSignature !== "string") {
@@ -162,8 +198,8 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
         return data(
             {
                 error: formIntent === "handle_checkout"
-                    ? "Could not complete checkout. Please try again."
-                    : "Could not calculate the order total. Please try again.",
+                    ? getCheckoutErrorMessage(error, "Could not complete checkout. Please try again.")
+                    : getCheckoutErrorMessage(error, "Could not calculate the order total. Please try again."),
             },
             { status: 502 }
         );

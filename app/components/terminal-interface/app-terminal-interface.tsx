@@ -1,7 +1,9 @@
 import { ProccessOrderPanel } from "./justify-end-window";
 import { MainView } from "./justify-start-window";
 import { useCallback, useEffect, useState } from "react";
+import { useFetcher } from "react-router";
 import type { MenuCategory, MenuItem, OrderLine } from "~/types/menu-category";
+import type { clientLoader as kitchenOrdersClientLoader } from "~/routes/kitchen-orders-route";
 
 type TerminalInterfaceProps = {
     menuCategory?: MenuCategory;
@@ -55,11 +57,23 @@ function withoutZeroModifiers(line: StoredOrderLine): StoredOrderLine {
 
 export default function TerminalInterface({ menuCategory }: TerminalInterfaceProps){
 
+    const kitchenOrdersFetcher = useFetcher<typeof kitchenOrdersClientLoader>();
     const [isPrcOrderPanelOpen, setIsPrcOrderPanelOpen] = useState(false)
     const [order, setOrder] = useState<StoredOrderLine[]>([])
     const [menusById, setMenusById] = useState<Record<string, MenuItem>>({})
     const [isCartLoaded, setIsCartLoaded] = useState(false)
     const [cartError, setCartError] = useState<string | null>(null)
+    const [kitchenOrdersRefreshKey, setKitchenOrdersRefreshKey] = useState(0)
+
+    const loadKitchenOrders = useCallback(() => {
+        kitchenOrdersFetcher.load("/kitchen-orders");
+    }, [kitchenOrdersFetcher.load])
+
+    useEffect(() => {
+        loadKitchenOrders();
+        const interval = window.setInterval(loadKitchenOrders, 30_000);
+        return () => window.clearInterval(interval);
+    }, [loadKitchenOrders, kitchenOrdersRefreshKey])
 
     const handleMenusLoaded = useCallback((menus: MenuItem[]) => {
         setMenusById((current) => ({
@@ -184,6 +198,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
 
     const clearOrderAfterCheckout = useCallback(() => {
         setOrder([]);
+        setKitchenOrdersRefreshKey((current) => current + 1);
         try {
             window.localStorage.setItem(CART_STORAGE_KEY, "[]");
         } catch (error) {
@@ -191,6 +206,17 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             setCartError("Checkout succeeded, but the saved order could not be cleared.");
         }
     }, [])
+
+    const kitchenOrders = kitchenOrdersFetcher.data &&
+        "orders" in kitchenOrdersFetcher.data &&
+        Array.isArray(kitchenOrdersFetcher.data.orders)
+        ? kitchenOrdersFetcher.data.orders
+        : [];
+    const kitchenOrdersError = kitchenOrdersFetcher.data &&
+        "error" in kitchenOrdersFetcher.data &&
+        typeof kitchenOrdersFetcher.data.error === "string"
+        ? kitchenOrdersFetcher.data.error
+        : null;
 
     return <>
         <div className="relative flex h-screen w-full min-w-0 overflow-hidden animate-in fade-in duration-500 ease-out">
@@ -200,6 +226,9 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     handleProccessPanelToggle={() => setIsPrcOrderPanelOpen(true)}
                     isProccessPanelOpen={isPrcOrderPanelOpen}
                     menuCategory={menuCategory}
+                    orders={kitchenOrders}
+                    ordersError={kitchenOrdersError}
+                    ordersLoading={kitchenOrdersFetcher.state !== "idle"}
                 />
             </div>
 

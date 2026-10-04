@@ -240,14 +240,18 @@ export function ProccessOrderPanel({
             pendingCheckout.intent === "checkout" &&
             "checkoutComplete" in result &&
             result.checkoutComplete &&
-            "checkout" in result
+            "checkout" in result &&
+            "payLater" in result &&
+            typeof result.payLater === "boolean"
         ) {
             const checkout = result.checkout;
             onCheckoutComplete();
             setCheckoutOpen(false);
             checkoutToastRef.current = null;
             pendingCheckout.resolve(
-                `Checkout successful. ${formatPrice(checkout.payment.amount)} paid via ${checkout.payment_method}.`
+                result.payLater
+                    ? `Order placed for payment later. Total due: ${formatPrice(checkout.totalAmount)}.`
+                    : `Checkout successful. ${formatPrice(checkout.payment.amount)} paid via ${checkout.payment_method}.`
             );
             return;
         }
@@ -260,7 +264,11 @@ export function ProccessOrderPanel({
         ));
     }, [checkoutFetcher.data, checkoutFetcher.state, cartSignature, formatPrice, onCheckoutComplete])
 
-    const handleCheckoutPayment = (paymentMethod: "cash" | "cashless") => {
+    const handleCheckoutPayment = (
+        paymentMethod: "cash" | "cashless",
+        orderType: "dine_in" | "take_out" = "dine_in",
+        payLater = false
+    ) => {
         if (checkoutFetcher.state !== "idle") return;
 
         try {
@@ -292,6 +300,8 @@ export function ProccessOrderPanel({
                 {
                     intent: "handle_checkout",
                     payment_method: paymentMethod,
+                    order_type: orderType,
+                    pay_later: String(payLater),
                     cart: JSON.stringify(cartData),
                 },
                 { method: "POST", action: "/checkout" }

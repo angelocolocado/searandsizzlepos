@@ -10,6 +10,7 @@ export default [
     route('/sidebar', 'routes/sidebar-route.tsx'),
     route('/cart', 'routes/cart/fetch-cartdata-route.tsx'),
     route('/checkout', 'routes/checkout/checkout-route.tsx'),
+    route('/kitchen-orders', 'routes/kitchen-orders-route.tsx'),
     
 
 
