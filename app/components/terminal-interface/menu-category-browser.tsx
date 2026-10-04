@@ -3,11 +3,10 @@ import { memo } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { MenuCategory, MenuItem } from "~/types/menu-category";
 
-const MenuItemCard = memo(function MenuItemCard({ menu, handleOpen }: { menu: MenuItem, handleOpen: () => void }) {
+const MenuItemCard = memo(function MenuItemCard({ menu, onSelectMenu }: { menu: MenuItem, onSelectMenu: (menu: MenuItem) => void }) {
 
     const handleClick = () => {
-        
-        handleOpen()
+        onSelectMenu(menu)
     }
 
     return (
@@ -22,7 +21,7 @@ const MenuItemCard = memo(function MenuItemCard({ menu, handleOpen }: { menu: Me
     );
 });
 
-export const MenuCategoryBrowser = memo(function MenuCategoryBrowser({ category, handleOpen }: { category?: MenuCategory, handleOpen: () => void }) {
+export const MenuCategoryBrowser = memo(function MenuCategoryBrowser({ category, onSelectMenu }: { category?: MenuCategory, onSelectMenu: (menu: MenuItem) => void }) {
     if (!category) {
         return (
             <section className="mt-3 flex min-h-32 items-center justify-center rounded-md border bg-card px-4 text-sm text-muted-foreground">
@@ -71,7 +70,7 @@ export const MenuCategoryBrowser = memo(function MenuCategoryBrowser({ category,
                         {recipeCategory.menus.length > 0 ? (
                             <div className="grid grid-cols-[repeat(auto-fill,92px)] gap-3">
                                 {recipeCategory.menus.map((menu) => (
-                                    <MenuItemCard handleOpen={handleOpen} key={menu.id} menu={menu} />
+                                    <MenuItemCard onSelectMenu={onSelectMenu} key={menu.id} menu={menu} />
                                 ))}
                             </div>
                         ) : (

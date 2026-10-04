@@ -14,6 +14,12 @@ export type MenuItem = {
     modifiers: MenuModifier[];
 };
 
+export type OrderLine = {
+    menuId: MenuItem["id"];
+    menu: MenuItem;
+    quantity: number;
+};
+
 export type RecipeCategory = {
     id: number;
     category: string;

@@ -2,7 +2,7 @@ import { Header } from "./header/app-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { DineInCard, type OrderCardData } from "./tabs/dine-in-card";
 import { MenuCategoryBrowser } from "./menu-category-browser";
-import type { MenuCategory } from "~/types/menu-category";
+import type { MenuCategory, MenuItem } from "~/types/menu-category";
 
 const orders: OrderCardData[] = [
     { orderNumber: 1, itemCount: 3, elapsed: "1 min ago", type: "Dine in" },
@@ -23,12 +23,13 @@ function OrderRail({ orders }: { orders: OrderCardData[] }) {
 }
 
 type ComponentProp = {
+    onSelectMenu: (menu: MenuItem) => void
     handleProccessPanelToggle: () => void
     isProccessPanelOpen: boolean
     menuCategory?: MenuCategory
 }
 
-export function MainView({ handleProccessPanelToggle, isProccessPanelOpen, menuCategory } : ComponentProp){
+export function MainView({ onSelectMenu, handleProccessPanelToggle, isProccessPanelOpen, menuCategory } : ComponentProp){
     return <>
     
         <Header
@@ -53,7 +54,7 @@ export function MainView({ handleProccessPanelToggle, isProccessPanelOpen, menuC
                     <OrderRail orders={orders.filter((order) => order.type === "Take out")} />
                 </TabsContent>
             </Tabs>
-            <MenuCategoryBrowser handleOpen={handleProccessPanelToggle} category={menuCategory} />
+            <MenuCategoryBrowser onSelectMenu={onSelectMenu} category={menuCategory} />
         </main>
     
     </>
