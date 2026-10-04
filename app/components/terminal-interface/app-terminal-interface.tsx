@@ -7,40 +7,19 @@ type TerminalInterfaceProps = {
     menuCategory?: MenuCategory;
 }
 
-const CART_STORAGE_KEY = "searsizzle-pos-order-cart";
-
-function isMenuItem(value: unknown): value is MenuItem {
-    if (typeof value !== "object" || value === null) return false;
-
-    const menu = value as Record<string, unknown>;
-    return (
-        typeof menu.id === "string" &&
-        typeof menu.name === "string" &&
-        typeof menu.selling_price === "number" &&
-        (typeof menu.description === "string" || menu.description === null) &&
-        typeof menu.status === "string" &&
-        Array.isArray(menu.modifiers) &&
-        menu.modifiers.every((modifier: unknown) => {
-            if (typeof modifier !== "object" || modifier === null) return false;
-            const item = modifier as Record<string, unknown>;
-            return (
-                typeof item.id === "string" &&
-                typeof item.name === "string" &&
-                typeof item.price === "number" &&
-                typeof item.category === "string"
-            );
-        })
-    );
+type StoredOrderLine = {
+    menu_id: string;
+    quantity: number;
 }
 
-function isOrderLine(value: unknown): value is OrderLine {
+const CART_STORAGE_KEY = "searsizzle-pos-order-cart";
+
+function isStoredOrderLine(value: unknown): value is StoredOrderLine {
     if (typeof value !== "object" || value === null) return false;
 
     const line = value as Record<string, unknown>;
     return (
-        typeof line.menuId === "string" &&
-        isMenuItem(line.menu) &&
-        line.menuId === line.menu.id &&
+        typeof line.menu_id === "string" &&
         typeof line.quantity === "number" &&
         Number.isInteger(line.quantity) &&
         line.quantity >= 1
@@ -50,7 +29,8 @@ function isOrderLine(value: unknown): value is OrderLine {
 export default function TerminalInterface({ menuCategory }: TerminalInterfaceProps){
 
     const [isPrcOrderPanelOpen, setIsPrcOrderPanelOpen] = useState(false)
-    const [cart, setCart] = useState<OrderLine[]>([])
+    const [order, setOrder] = useState<StoredOrderLine[]>([])
+    const [menusById, setMenusById] = useState<Record<string, MenuItem>>({})
     const [isCartLoaded, setIsCartLoaded] = useState(false)
     const [cartError, setCartError] = useState<string | null>(null)
 
@@ -59,10 +39,10 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             const storedCart = window.localStorage.getItem(CART_STORAGE_KEY);
             if (storedCart) {
                 const parsedCart: unknown = JSON.parse(storedCart);
-                if (!Array.isArray(parsedCart) || !parsedCart.every(isOrderLine)) {
+                if (!Array.isArray(parsedCart) || !parsedCart.every(isStoredOrderLine)) {
                     throw new Error("Saved order data has an invalid format.");
                 }
-                setCart(parsedCart);
+                setOrder(parsedCart);
             }
         } catch (error) {
             console.error("Unable to load the saved order cart.", error);
@@ -76,42 +56,63 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         if (!isCartLoaded || cartError) return;
 
         try {
-            window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+            window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(order));
         } catch (error) {
             console.error("Unable to save the order cart.", error);
             setCartError("Your latest order changes could not be saved to this device.");
         }
-    }, [cart, cartError, isCartLoaded])
+    }, [order, cartError, isCartLoaded])
+
+    useEffect(() => {
+        const menus = menuCategory?.recipe_categories.flatMap(
+            (recipeCategory) => recipeCategory.menus
+        ) ?? [];
+
+        if (menus.length > 0) {
+            setMenusById((current) => ({
+                ...current,
+                ...Object.fromEntries(menus.map((menu) => [menu.id, menu])),
+            }));
+        }
+    }, [menuCategory])
+
+    const cart: OrderLine[] = order.flatMap((line) => {
+        const menu = menusById[line.menu_id];
+        return menu
+            ? [{ menuId: line.menu_id, menu, quantity: line.quantity }]
+            : [];
+    })
 
     const handleSelectMenu = (menu: MenuItem) => {
-        setCart((currentCart) => {
-            const existingLine = currentCart.find((line) => line.menuId === menu.id);
+        setMenusById((current) => ({ ...current, [menu.id]: menu }));
+        setOrder((currentOrder) => {
+            const existingLine = currentOrder.find((line) => line.menu_id === menu.id);
             if (existingLine) {
-                return currentCart.map((line) =>
-                    line.menuId === menu.id
-                        ? { ...line, menu, quantity: line.quantity + 1 }
+                return currentOrder.map((line) =>
+                    line.menu_id === menu.id
+                        ? { ...line, quantity: line.quantity + 1 }
                         : line
                 );
             }
-            return [...currentCart, { menuId: menu.id, menu, quantity: 1 }];
+            return [...currentOrder, { menu_id: menu.id, quantity: 1 }];
         })
         setIsPrcOrderPanelOpen(true)
     }
 
     const updateQuantity = (menuId: string, quantity: number) => {
-        setCart((currentCart) =>
-            currentCart.map((line) =>
-                line.menuId === menuId ? { ...line, quantity } : line
+        setOrder((currentOrder) =>
+            currentOrder.map((line) =>
+                line.menu_id === menuId ? { ...line, quantity } : line
             )
         )
     }
 
     const removeMenu = (menuId: string) => {
-        setCart((currentCart) => currentCart.filter((line) => line.menuId !== menuId))
+        setOrder((currentOrder) => currentOrder.filter((line) => line.menu_id !== menuId))
     }
 
     return <>
-        <div className="flex h-screen w-full min-w-0 overflow-hidden animate-in fade-in duration-500 ease-out">
+        <div className="relative flex h-screen w-full min-w-0 overflow-hidden animate-in fade-in duration-500 ease-out">
             <div className="min-w-0 flex-1">
                 <MainView
                     onSelectMenu={handleSelectMenu}
@@ -121,8 +122,16 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                 />
             </div>
 
+            {isPrcOrderPanelOpen && (
+                <button
+                    type="button"
+                    className="fixed inset-0 z-40 bg-black/35 lg:hidden"
+                    aria-label="Close process order panel"
+                    onClick={() => setIsPrcOrderPanelOpen(false)}
+                />
+            )}
             <div
-                className={`h-full min-w-0 shrink-0 overflow-hidden transition-[flex-basis] duration-300 ease-in-out motion-reduce:transition-none ${isPrcOrderPanelOpen ? "basis-[30%]" : "basis-0"}`}
+                className={`fixed inset-y-0 right-0 z-50 h-full w-[min(92vw,26rem)] min-w-0 shrink-0 overflow-hidden border-l bg-background shadow-xl transition-transform duration-300 ease-in-out motion-reduce:transition-none lg:relative lg:inset-auto lg:z-auto lg:w-auto lg:shadow-none lg:transition-[flex-basis] ${isPrcOrderPanelOpen ? "translate-x-0 lg:basis-[clamp(20rem,32vw,30rem)]" : "translate-x-full lg:translate-x-0 lg:basis-0"}`}
                 aria-hidden={!isPrcOrderPanelOpen}
                 inert={!isPrcOrderPanelOpen}
             >
