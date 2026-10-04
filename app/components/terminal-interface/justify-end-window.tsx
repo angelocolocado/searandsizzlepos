@@ -12,8 +12,33 @@ import { SlideToConfirm } from "~/components/lightswind/slide-to-confirm";
 import type { OrderLine } from "~/types/menu-category";
 import { toast } from "sonner";
 import { useFetcher } from "react-router";
-import type { MenuItem } from "~/types/menu-category";
+import type { CheckoutCartLine, MenuItem } from "~/types/menu-category";
 import type { clientAction } from "~/routes/cart/fetch-cartdata-route";
+import type { clientAction as checkoutClientAction } from "~/routes/checkout/checkout-route";
+
+function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
+    if (typeof value !== "object" || value === null) return false;
+
+    const line = value as Record<string, unknown>;
+    return (
+        typeof line.menu_id === "string" &&
+        typeof line.quantity === "number" &&
+        Number.isInteger(line.quantity) &&
+        line.quantity >= 1 &&
+        (line.modifiers === undefined ||
+            (Array.isArray(line.modifiers) &&
+                line.modifiers.every((value: unknown) => {
+                    if (typeof value !== "object" || value === null) return false;
+                    const modifier = value as Record<string, unknown>;
+                    return (
+                        typeof modifier.modifier_id === "string" &&
+                        typeof modifier.quantity === "number" &&
+                        Number.isInteger(modifier.quantity) &&
+                        modifier.quantity >= 0
+                    );
+                })))
+    );
+}
 
 function isMenuItem(value: unknown): value is MenuItem {
     if (typeof value !== "object" || value === null) return false;
@@ -59,6 +84,7 @@ export function ProccessOrderPanel({
     onRemoveMenu,
 }: ComponentProps) {
     const fetcher = useFetcher<typeof clientAction>()
+    const checkoutFetcher = useFetcher<typeof checkoutClientAction>()
     const [infoMenuId, setInfoMenuId] = useState<string | null>(null)
     const [removalLine, setRemovalLine] = useState<OrderLine | null>(null)
     const infoMenu = cart.find((line) => line.menuId === infoMenuId)?.menu
@@ -74,6 +100,14 @@ export function ProccessOrderPanel({
             ),
         0
     )
+    const cartSignature = JSON.stringify(cart.map((line) => ({
+        menu_id: line.menuId,
+        quantity: line.quantity,
+        modifiers: line.modifiers.map((modifier) => ({
+            modifier_id: modifier.modifierId,
+            quantity: modifier.quantity,
+        })),
+    })))
     const lineTotal = (line: OrderLine) =>
         line.menu.selling_price * line.quantity +
         line.modifiers.reduce(
@@ -86,6 +120,69 @@ export function ProccessOrderPanel({
             style: "currency",
             currency: "PHP",
         }).format(price)
+
+    const handlePrepareCheckout = () => {
+        if (checkoutFetcher.state !== "idle") return;
+
+        try {
+            const savedCart = window.localStorage.getItem("searsizzle-pos-order-cart");
+            const cartData: unknown = savedCart ? JSON.parse(savedCart) : [];
+
+            if (
+                !Array.isArray(cartData) ||
+                cartData.length === 0 ||
+                !cartData.every(isCheckoutCartLine)
+            ) {
+                toast.error("Add a valid item to the order before preparing checkout.");
+                return;
+            }
+
+            const submittedCartSignature = JSON.stringify(cartData.map((line) => ({
+                menu_id: line.menu_id,
+                quantity: line.quantity,
+                modifiers: (line.modifiers ?? [])
+                    .filter((modifier) => modifier.quantity > 0)
+                    .map((modifier) => ({
+                        modifier_id: modifier.modifier_id,
+                        quantity: modifier.quantity,
+                    })),
+            })))
+
+            checkoutFetcher.submit(
+                {
+                    intent: "handle_recalculate",
+                    cart: JSON.stringify(cartData),
+                    cart_signature: submittedCartSignature,
+                },
+                { method: "POST", action: "/checkout" }
+            );
+        } catch (error) {
+            console.error("Unable to prepare checkout from the saved cart.", error);
+            toast.error("Could not read the saved order. Please review the cart and try again.");
+        }
+    }
+
+    useEffect(() => {
+        const result = checkoutFetcher.data;
+        if (!result) return;
+
+        if ("error" in result && typeof result.error === "string") {
+            toast.error(result.error);
+            return;
+        }
+
+        if (
+            "totalAmount" in result &&
+            typeof result.totalAmount === "number" &&
+            Number.isFinite(result.totalAmount) &&
+            typeof result.cartSignature === "string"
+        ) {
+            toast.success("Order prepared successfully.");
+            return;
+        }
+
+        toast.error("The checkout service returned an invalid total.");
+    }, [checkoutFetcher.data])
 
     useEffect(() => {
         if (!fetcher.data) return;
@@ -313,8 +410,13 @@ export function ProccessOrderPanel({
                         {formatPrice(total)}
                     </span>
                 </div>
-                <Button type="button" disabled className="h-10 w-full bg-green-600 text-white hover:bg-green-700">
-                    Process payment
+                <Button
+                    type="button"
+                    onClick={handlePrepareCheckout}
+                    disabled={cart.length === 0 || checkoutFetcher.state !== "idle"}
+                    className="h-10 w-full bg-green-600 text-white hover:bg-green-700"
+                >
+                    {checkoutFetcher.state !== "idle" ? "Preparing order..." : "Process payment"}
                 </Button>
                 <p className="mt-2 text-center text-[11px] text-muted-foreground">
                     Payment checkout is not connected yet.

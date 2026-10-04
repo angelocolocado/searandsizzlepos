@@ -29,6 +29,21 @@ export type OrderLine = {
     }[];
 };
 
+export type CheckoutCartModifier = {
+    modifier_id: string;
+    quantity: number;
+};
+
+export type CheckoutCartLine = {
+    menu_id: string;
+    quantity: number;
+    modifiers?: CheckoutCartModifier[];
+};
+
+export type CheckoutPrepareResponse = {
+    totalAmount: number;
+};
+
 export type RecipeCategory = {
     id: number;
     category: string;
