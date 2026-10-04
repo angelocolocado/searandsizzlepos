@@ -52,7 +52,7 @@ export default function App() {
   const navigation = useNavigation();
 
   useEffect(() => {
-    if (navigation.state !== "loading") {
+    if (navigation.state !== "idle") {
       NProgress.start();
     } else {
       NProgress.done(); 
