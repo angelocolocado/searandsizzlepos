@@ -1,6 +1,5 @@
 import type { Route } from "./+types/menu-category-route";
 import TerminalInterface from "~/components/terminal-interface/app-terminal-interface";
-import { Spinner } from "~/components/ui/spinner";
 import api from "~/lib/axios";
 import axios from "axios";
 import { Link, useRevalidator } from "react-router";
@@ -36,14 +35,6 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs): Promise<
 }
 
 clientLoader.hydrate = true as const;
-
-export function HydrateFallback() {
-    return (
-        <main className="flex h-screen w-full items-center justify-center">
-            <Spinner />
-        </main>
-    );
-}
 
 export default function MenuCategoryRoute({ loaderData }: Route.ComponentProps) {
     const revalidator = useRevalidator();
