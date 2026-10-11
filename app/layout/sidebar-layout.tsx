@@ -12,14 +12,6 @@ type ItemType = {
   url: string
 }
 
-export function HydrateFallback(){
-    return (
-        <main className="flex items-center justify-center w-full h-[100vh]">
-          <Spinner />
-        </main>
-    )
-}
-
 export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (

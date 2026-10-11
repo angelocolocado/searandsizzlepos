@@ -13,6 +13,7 @@ import "nprogress/nprogress.css"
 import type { Route } from "./+types/root";
 import "./app.css";
 import { useEffect } from "react";
+import { Spinner } from "./components/ui/spinner";
 
 
 
@@ -45,6 +46,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </body>
     </html>
   );
+}
+export function HydrateFallback(){
+    return (
+        <main className="flex items-center justify-center w-full h-[100vh]">
+          <Spinner />
+        </main>
+    )
 }
 
 export default function App() {
