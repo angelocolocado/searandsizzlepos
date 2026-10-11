@@ -229,6 +229,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     orders={kitchenOrders}
                     ordersError={kitchenOrdersError}
                     ordersLoading={kitchenOrdersFetcher.state !== "idle"}
+                    onKitchenOrderUpdated={() => setKitchenOrdersRefreshKey((current) => current + 1)}
                 />
             </div>
 

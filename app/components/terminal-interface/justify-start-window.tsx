@@ -4,12 +4,52 @@ import { DineInCard } from "./tabs/dine-in-card";
 import { MenuCategoryBrowser } from "./menu-category-browser";
 import type { KitchenOrder, MenuCategory, MenuItem } from "~/types/menu-category";
 import { useState } from "react";
+import axios from "axios";
+import { Banknote, Check, CreditCard } from "lucide-react";
+import { toast } from "sonner";
+import api from "~/lib/axios";
+import { Button } from "~/components/ui/button";
 import {
     Dialog,
     DialogContent,
     DialogHeader,
     DialogTitle,
 } from "~/components/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "~/components/ui/select";
+
+const VOID_REASONS = [
+    { value: "1", label: "Customer Changed Mind" },
+    { value: "2", label: "Cashier Encoding Error" },
+    { value: "3", label: "Out of Stock / Unavailable" },
+    { value: "4", label: "Quality Issue / Damaged" },
+] as const;
+
+type PaymentMethod = "cash" | "cashless";
+
+function getActionErrorMessage(error: unknown, fallback: string) {
+    if (axios.isAxiosError(error)) {
+        const responseData: unknown = error.response?.data;
+        if (typeof responseData === "object" && responseData !== null) {
+            const data = responseData as Record<string, unknown>;
+            if (typeof data.message === "string") return data.message;
+            if (typeof data.errors === "object" && data.errors !== null) {
+                const messages = Object.values(data.errors)
+                    .flatMap((value) => Array.isArray(value) ? value : [])
+                    .filter((value): value is string => typeof value === "string");
+                if (messages.length > 0) return messages.join(" ");
+            }
+        }
+        if (!error.response) return "The service could not be reached. Check your connection and try again.";
+    }
+
+    return error instanceof Error ? error.message : fallback;
+}
 
 const formatPayment = (amount: number) =>
     new Intl.NumberFormat("en-PH", {
@@ -49,6 +89,7 @@ type ComponentProp = {
     orders: KitchenOrder[]
     ordersError: string | null
     ordersLoading: boolean
+    onKitchenOrderUpdated: () => void
 }
 
 export function MainView({
@@ -59,15 +100,92 @@ export function MainView({
     orders,
     ordersError,
     ordersLoading,
+    onKitchenOrderUpdated,
 }: ComponentProp){
 
 
     const [selectedOrder, setSelectedOrder] = useState<KitchenOrder | null>(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+    const [voidReason, setVoidReason] = useState<string | null>(null);
+    const [isPayMethodSelectionOpen, setIsPayMethodSelectionOpen] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+    const [cashReceived, setCashReceived] = useState("");
+    const cashReceivedAmount = Number(cashReceived || 0);
+    const totalPayment = selectedOrder?.totalPayment ?? null;
+    const changeDue = totalPayment === null
+        ? 0
+        : Math.max(0, cashReceivedAmount - totalPayment);
+
+    const appendCashDigit = (digit: string) => {
+        setCashReceived((current) => {
+            if (current.length >= 12) return current;
+            if (digit === ".") {
+                if (current.includes(".")) return current;
+                return current ? `${current}.` : "0.";
+            }
+            if (current.includes(".") && current.split(".")[1].length >= 2) return current;
+            if (current === "0") return digit;
+            return `${current}${digit}`;
+        });
+    };
 
     const handleOrderClick = (order: KitchenOrder) => {
         setSelectedOrder(order);
+        setVoidReason(null);
+        setIsPayMethodSelectionOpen(false);
+        setPaymentMethod(null);
+        setCashReceived("");
         setIsDialogOpen(true);
+    };
+
+    const handleOrderStatus = async (status: "cooked" | "void") => {
+        if (!selectedOrder || isActionSubmitting) return;
+
+        const reason = VOID_REASONS.find((option) => option.value === voidReason);
+        if (status === "void" && !reason) return;
+
+        setIsActionSubmitting(true);
+        try {
+            await api.patch(`v1/orders/${selectedOrder.orderNumber}/status`, {
+                status,
+                ...(status === "void" && reason ? { void_reason: Number(reason.value) } : {}),
+            });
+            toast.success(status === "cooked" ? "Order marked as cooked." : "Order voided.");
+            setIsDialogOpen(false);
+            setVoidReason(null);
+            onKitchenOrderUpdated();
+        } catch (error) {
+            toast.error(getActionErrorMessage(error, "Could not update this order."));
+        } finally {
+            setIsActionSubmitting(false);
+        }
+    };
+
+    const handlePayLaterOrder = async () => {
+        if (!selectedOrder || !paymentMethod || isActionSubmitting) return;
+        if (
+            paymentMethod === "cash" &&
+            (totalPayment === null || cashReceivedAmount < totalPayment)
+        ) return;
+
+        setIsActionSubmitting(true);
+        try {
+            await api.post(`v1/orders/${selectedOrder.orderNumber}/pay`, {
+                payment_method: paymentMethod,
+            });
+            toast.success("Pay-later order payment recorded.");
+            setSelectedOrder((currentOrder) => currentOrder
+                ? { ...currentOrder, payment_status: "paid" }
+                : currentOrder);
+            setIsPayMethodSelectionOpen(false);
+            setPaymentMethod(null);
+            onKitchenOrderUpdated();
+        } catch (error) {
+            toast.error(getActionErrorMessage(error, "Could not process this payment."));
+        } finally {
+            setIsActionSubmitting(false);
+        }
     };
 
     return <>
@@ -110,7 +228,7 @@ export function MainView({
             open={isDialogOpen}
             onOpenChange={setIsDialogOpen}
         >
-            <DialogContent className="w-[calc(100%-2rem)] max-w-lg">
+            <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto">
                 {selectedOrder && (
                     <>
                         <DialogHeader className="gap-2">
@@ -186,6 +304,202 @@ export function MainView({
                                         : formatPayment(selectedOrder.totalPayment)}
                                 </span>
                             </div>
+                        )}
+
+                        {isPayMethodSelectionOpen ? (
+                            <section className="space-y-3 border-t pt-4">
+                                <div>
+                                    <h3 className="text-sm font-semibold">Settle payment</h3>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                        Choose how this pay-later order is being paid.
+                                    </p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        aria-pressed={paymentMethod === "cash"}
+                                        disabled={isActionSubmitting}
+                                        className={`h-auto min-h-16 justify-start gap-2 px-2.5 sm:gap-3 sm:px-3 ${paymentMethod === "cash" ? "border-green-600 bg-green-50 ring-1 ring-green-600 dark:bg-green-950/30" : ""}`}
+                                        onClick={() => {
+                                            setPaymentMethod("cash");
+                                            setCashReceived("");
+                                        }}
+                                    >
+                                        <Banknote className="size-5 shrink-0 text-green-700" />
+                                        <span className="text-left">
+                                            <span className="block font-semibold">Cash</span>
+                                            <span className="block text-[11px] text-muted-foreground sm:text-xs">Pay at counter</span>
+                                        </span>
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        aria-pressed={paymentMethod === "cashless"}
+                                        disabled={isActionSubmitting}
+                                        className={`h-auto min-h-16 justify-start gap-2 px-2.5 sm:gap-3 sm:px-3 ${paymentMethod === "cashless" ? "border-green-600 bg-green-50 ring-1 ring-green-600 dark:bg-green-950/30" : ""}`}
+                                        onClick={() => {
+                                            setPaymentMethod("cashless");
+                                            setCashReceived("");
+                                        }}
+                                    >
+                                        <CreditCard className="size-5 shrink-0 text-green-700" />
+                                        <span className="text-left">
+                                            <span className="block font-semibold">Cashless</span>
+                                            <span className="block text-[11px] text-muted-foreground sm:text-xs">Card or e-wallet</span>
+                                        </span>
+                                    </Button>
+                                </div>
+                                {paymentMethod === "cash" && totalPayment !== null && (
+                                    <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                                        <div>
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                                Cash received
+                                            </p>
+                                            <div className="mt-2 rounded-lg border bg-background px-3 py-2.5 text-right">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <p className="text-left text-xs text-muted-foreground">Amount received</p>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="h-7 px-2 text-xs"
+                                                        disabled={isActionSubmitting}
+                                                        onClick={() => setCashReceived("")}
+                                                    >
+                                                        Clear
+                                                    </Button>
+                                                </div>
+                                                <p className="mt-1 text-xl font-bold tabular-nums">
+                                                    {formatPayment(cashReceivedAmount)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "⌫", "0", "."].map((key) => (
+                                                <Button
+                                                    key={key}
+                                                    type="button"
+                                                    variant={key === "⌫" || key === "." ? "outline" : "secondary"}
+                                                    className="h-10 rounded-xl text-lg font-semibold tabular-nums"
+                                                    aria-label={key === "⌫" ? "Delete last digit" : key === "." ? "Enter decimal point" : `Enter ${key}`}
+                                                    disabled={isActionSubmitting}
+                                                    onClick={() => {
+                                                        if (key === "⌫") {
+                                                            setCashReceived((current) => current.slice(0, -1));
+                                                        } else {
+                                                            appendCashDigit(key);
+                                                        }
+                                                    }}
+                                                >
+                                                    {key}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                        <div className="flex items-center justify-between gap-3 border-t pt-3">
+                                            <span className="text-sm text-muted-foreground">Change</span>
+                                            <span className="text-sm font-semibold tabular-nums">
+                                                {formatPayment(changeDue)}
+                                            </span>
+                                        </div>
+                                        {cashReceivedAmount < totalPayment && (
+                                            <p className="text-center text-xs text-muted-foreground">
+                                                Enter at least {formatPayment(totalPayment)} to continue.
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                                {paymentMethod === "cash" && totalPayment === null && (
+                                    <p role="alert" className="text-sm text-destructive">
+                                        The total payment is unavailable, so cash settlement cannot continue.
+                                    </p>
+                                )}
+                                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        disabled={isActionSubmitting}
+                                        onClick={() => {
+                                            setIsPayMethodSelectionOpen(false);
+                                            setPaymentMethod(null);
+                                        }}
+                                    >
+                                        Back
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        className="bg-green-600 text-white hover:bg-green-700"
+                                        disabled={
+                                            !paymentMethod ||
+                                            isActionSubmitting ||
+                                            (paymentMethod === "cash" &&
+                                                (totalPayment === null || cashReceivedAmount < totalPayment))
+                                        }
+                                        onClick={handlePayLaterOrder}
+                                    >
+                                        {isActionSubmitting ? "Processing..." : "Confirm payment"}
+                                    </Button>
+                                </div>
+                            </section>
+                        ) : (
+                            <section className="space-y-3 border-t pt-4">
+                                <Button
+                                    type="button"
+                                    className="w-full bg-green-600 text-white hover:bg-green-700"
+                                    disabled={isActionSubmitting}
+                                    onClick={() => handleOrderStatus("cooked")}
+                                >
+                                    <Check />
+                                    {isActionSubmitting ? "Updating order..." : "Mark as cooked"}
+                                </Button>
+
+                                <div className="space-y-2">
+                                    <label
+                                        htmlFor="void-reason"
+                                        className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                                    >
+                                        Void reason
+                                    </label>
+                                    <Select
+                                        value={voidReason}
+                                        onValueChange={setVoidReason}
+                                        disabled={isActionSubmitting}
+                                    >
+                                        <SelectTrigger id="void-reason" className="w-full">
+                                            <SelectValue placeholder="Choose a reason" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {VOID_REASONS.map((reason) => (
+                                                <SelectItem key={reason.value} value={reason.value}>
+                                                    {reason.label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        type="button"
+                                        variant="destructive"
+                                        className="w-full"
+                                        disabled={!voidReason || isActionSubmitting}
+                                        onClick={() => handleOrderStatus("void")}
+                                    >
+                                        {isActionSubmitting ? "Updating order..." : "Void order"}
+                                    </Button>
+                                </div>
+
+                                {selectedOrder.payment_status === "pay_later" && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="w-full border-orange-300 text-orange-800 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-300 dark:hover:bg-orange-950/30"
+                                        disabled={isActionSubmitting}
+                                        onClick={() => setIsPayMethodSelectionOpen(true)}
+                                    >
+                                        <Banknote />
+                                        Pay order
+                                    </Button>
+                                )}
+                            </section>
                         )}
                     </>
                 )}
