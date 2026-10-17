@@ -12,6 +12,23 @@
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-150%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1; /* Smooth na papasok ang ilaw habang gumagalaw */
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(150%);
+    opacity: 0; /* Unti-unting mawawala ang ilaw bago mag-reset sa 0% */
+  }
+}
+
 html,
 body {
   min-height: 100%;

@@ -171,7 +171,7 @@ export function MainView({
 
         setIsActionSubmitting(true);
         try {
-            await api.patch(`v1/orders/${selectedOrder.orderNumber}/status`, {
+            await api.patch(`v1/orders/${selectedOrder.orderId}/status`, {
                 status,
                 ...(status === "void" && reason ? { void_reason: Number(reason.value) } : {}),
             });

@@ -13,8 +13,7 @@ import "nprogress/nprogress.css"
 import type { Route } from "./+types/root";
 import "./app.css";
 import { useEffect } from "react";
-import { Spinner } from "./components/ui/spinner";
-
+import { Skeleton } from "./components/ui/skeleton";
 
 
 export const links: Route.LinksFunction = () => [
@@ -47,12 +46,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </html>
   );
 }
-export function HydrateFallback(){
-    return (
-        <main className="flex items-center justify-center w-full h-[100vh]">
-          <Spinner />
-        </main>
-    )
+
+export function HydrateFallback() {
+  useEffect(() => {
+    NProgress.start();
+    return () => {
+      NProgress.done();
+    };
+  }, []);
+
+  return (
+    <main className="flex w-full h-screen bg-white gap-5 dark:bg-gray-900 p-10">
+      <Skeleton className="h-full w-[16rem] rounded-md" />
+      <div className="w-full flex flex-col gap-5">
+        <Skeleton className="h-[50px] w-full rounded-md" />
+        <Skeleton className="h-full w-full rounded-md" />
+      </div>
+    </main>
+  );
 }
 
 export default function App() {

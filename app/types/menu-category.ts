@@ -56,6 +56,7 @@ export type CheckoutSuccessResponse = {
 };
 
 export type KitchenOrder = {
+    orderId: number
     orderNumber: number;
     itemCount: number | null;
     elapsed: string;
