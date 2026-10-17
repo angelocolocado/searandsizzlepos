@@ -1,7 +1,26 @@
 import { Printer } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
+
+export type OrderPrintRequest = {
+  items: {
+    name: string;
+    quantity: number;
+    modifiers: {
+      name: string;
+      quantity: number;
+    }[];
+  }[];
+  totalAmount: number;
+  orderType: "dine_in" | "take_out";
+  paymentMethod: "cash" | "cashless";
+  payLater: boolean;
+};
+
+export type OrderPrinterHandle = {
+  handleOrderPrint: (request: OrderPrintRequest) => Promise<void>;
+};
 
 type WritableCharacteristic = {
   properties: {
@@ -13,7 +32,7 @@ type WritableCharacteristic = {
 
 type ComponentProps = {
   mode: "print_qr" | "print_order" | "setup_printer";
-  qr_object: string;
+  qr_object?: string;
   text: string;
   isDisabled: boolean;
 };
@@ -30,7 +49,10 @@ const writeInChunks = async (characteristic: WritableCharacteristic, data: Uint8
     }
   };
 
-export default function ButtonPrint({ mode, qr_object, text, isDisabled }: ComponentProps) {
+const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function ButtonPrint(
+  { mode, qr_object, text, isDisabled },
+  ref
+) {
   const [device, setDevice] = useState<any>(null);
   const [characteristic, setCharacteristic] = useState<WritableCharacteristic | null>(null);
   const [status, setStatus] = useState('Disconnected');
@@ -144,16 +166,14 @@ export default function ButtonPrint({ mode, qr_object, text, isDisabled }: Compo
 
   const handleQrPrint = async (qrImageUrl: string) => {
     if (!characteristic) {
-      alert('Connect the printer first!');
-      return;
+      throw new Error('Connect the printer first.');
     }
-
-    const qrRaster = await createQrRaster(qrImageUrl);
 
     try {
       setLoading(true);
       setStatus('Printing QR Code...');
 
+      const qrRaster = await createQrRaster(qrImageUrl);
       const encoder = new TextEncoder();
 
 
@@ -228,6 +248,98 @@ export default function ButtonPrint({ mode, qr_object, text, isDisabled }: Compo
     }
   };
 
+  const handleOrderPrint = async (request: OrderPrintRequest) => {
+    if (!characteristic) {
+      throw new Error('Connect the order printer before checkout.');
+    }
+
+    try {
+      setLoading(true);
+      setStatus('Printing order receipt...');
+
+      const encoder = new TextEncoder();
+      const divider = '--------------------------------\n';
+      const wrapText = (text: string, width = 32) => {
+        const words = text.split(/\s+/);
+        const lines: string[] = [];
+        let line = '';
+
+        for (const word of words) {
+          if (!word) continue;
+          if (!line) {
+            line = word;
+          } else if (`${line} ${word}`.length <= width) {
+            line += ` ${word}`;
+          } else {
+            lines.push(line);
+            line = word;
+          }
+        }
+
+        if (line) lines.push(line);
+        return lines;
+      };
+
+      const orderLines = request.items.flatMap((item) => [
+        ...wrapText(`${item.name} x${item.quantity}`),
+        ...item.modifiers.flatMap((modifier) =>
+          wrapText(`  + ${modifier.name} x${modifier.quantity}`)
+        ),
+      ]);
+      const itemContent = encoder.encode(`${orderLines.join('\n')}\n`);
+      const orderDetails = encoder.encode(
+        `${request.orderType === 'dine_in' ? 'DINE IN' : 'TAKE OUT'}\n` +
+        `${request.payLater ? 'PAY LATER' : request.paymentMethod.toUpperCase()}\n`
+      );
+      const total = encoder.encode(`TOTAL  PHP ${request.totalAmount.toFixed(2)}\n`);
+      const title = encoder.encode('SEAR & SIZZLE\n');
+      const website = encoder.encode('searensizzle.com\n');
+      const footer = encoder.encode(
+        '\n' +
+        '********************************\n' +
+        'Thank you for dining with us!\n' +
+        'We hope to see you again soon!\n' +
+        'Have a sizzling day!\n\n'
+      );
+
+      const payload = combineUint8Arrays([
+        ESC_INIT,
+        ALIGN_CENTER,
+        TEXT_BOLD_ON,
+        title,
+        TEXT_BOLD_OFF,
+        website,
+        encoder.encode(divider),
+        TEXT_BOLD_ON,
+        encoder.encode('ORDER RECEIPT\n'),
+        TEXT_BOLD_OFF,
+        orderDetails,
+        encoder.encode(divider),
+        new Uint8Array([0x1b, 0x61, 0x00]),
+        itemContent,
+        encoder.encode(divider),
+        new Uint8Array([0x1b, 0x61, 0x01]),
+        TEXT_BOLD_ON,
+        total,
+        TEXT_BOLD_OFF,
+        encoder.encode(divider),
+        footer,
+        PAPER_FEED,
+      ]);
+
+      await writeInChunks(characteristic, payload, 100);
+      setStatus('Print Success!');
+    } catch (error) {
+      console.error('Order Print Error:', error);
+      setStatus(`Print Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useImperativeHandle(ref, () => ({ handleOrderPrint }), [handleOrderPrint]);
+
   const combineUint8Arrays = (arrays: Uint8Array[]) => {
     const totalLength = arrays.reduce((acc, curr) => acc + curr.length, 0);
     const result = new Uint8Array(totalLength);
@@ -239,11 +351,11 @@ export default function ButtonPrint({ mode, qr_object, text, isDisabled }: Compo
     return result;
   };
 
-  const handleOrderPrint = () => {
-    
-  }
-
   if (mode === "print_qr") {
+    if (!qr_object) {
+      return <p role="alert">QR image is unavailable.</p>;
+    }
+
     return (
       <div>
         {!device ? (
@@ -263,5 +375,25 @@ export default function ButtonPrint({ mode, qr_object, text, isDisabled }: Compo
     );
   }
 
-  return <>You misconfigured this component if you saw this.</>;
-}
+  if (mode === "print_order") {
+    return (
+      <div>
+        {!device ? (
+          <Button
+            onClick={connectPrinter}
+            disabled={loading || isDisabled}
+            className="bg-red-700 text-white"
+          >
+            {loading && <Spinner />} Connect Order Printer
+          </Button>
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">{status}</p>
+        )}
+      </div>
+    );
+  }
+
+  return <p role="alert">Printer mode is not supported.</p>;
+});
+
+export default ButtonPrint;

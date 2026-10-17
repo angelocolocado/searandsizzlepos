@@ -29,6 +29,7 @@ import {
     parseStoredOrderCart,
     type StoredOrderCart,
 } from "~/lib/order-cart-storage";
+import type { OrderPrinterHandle } from "./print-service/thermal-printer";
 
 function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
     if (typeof value !== "object" || value === null) return false;
@@ -89,6 +90,26 @@ type ComponentProps = {
     onCheckoutComplete: () => void
 }
 
+type CheckoutToast = {
+    resolve: (successMessage?: string) => void
+    reject: (error: Error) => void
+}
+
+type PendingCheckout = (
+    | { intent: "prepare" }
+    | {
+        intent: "checkout"
+        items: {
+            name: string
+            quantity: number
+            modifiers: { name: string; quantity: number }[]
+        }[]
+        paymentMethod: "cash" | "cashless"
+        orderType: "dine_in" | "take_out"
+        payLater: boolean
+    }
+) & CheckoutToast
+
 export function ProccessOrderPanel({
     handleClose,
     cart,
@@ -101,14 +122,12 @@ export function ProccessOrderPanel({
 }: ComponentProps) {
     const fetcher = useFetcher<typeof clientAction>()
     const checkoutFetcher = useFetcher<typeof checkoutClientAction>()
-    const checkoutToastRef = useRef<{
-        intent: "prepare" | "checkout";
-        resolve: (successMessage?: string) => void;
-        reject: (error: Error) => void;
-    } | null>(null)
+    const checkoutToastRef = useRef<PendingCheckout | null>(null)
+    const orderPrinterRef = useRef<OrderPrinterHandle>(null)
     const [infoMenuId, setInfoMenuId] = useState<string | null>(null)
     const [removalLine, setRemovalLine] = useState<OrderLine | null>(null)
     const [checkoutOpen, setCheckoutOpen] = useState(false)
+    const [isPrintingOrder, setIsPrintingOrder] = useState(false)
     const [preparedTotal, setPreparedTotal] = useState<{
         amount: number;
         cartSignature: string;
@@ -261,14 +280,37 @@ export function ProccessOrderPanel({
             typeof result.payLater === "boolean"
         ) {
             const checkout = result.checkout;
-            onCheckoutComplete();
-            setCheckoutOpen(false);
             checkoutToastRef.current = null;
-            pendingCheckout.resolve(
-                result.payLater
-                    ? `Order placed for payment later. Total due: ${formatPrice(checkout.totalAmount)}.`
-                    : `Checkout successful. ${formatPrice(checkout.payment.amount)} paid via ${checkout.payment_method}.`
-            );
+            setIsPrintingOrder(true);
+            void (async () => {
+                let printError: string | null = null;
+                try {
+                    const printer = orderPrinterRef.current;
+                    if (!printer) throw new Error("Order printer is unavailable.");
+                    await printer.handleOrderPrint({
+                        items: pendingCheckout.items,
+                        totalAmount: checkout.totalAmount,
+                        orderType: pendingCheckout.orderType,
+                        paymentMethod: pendingCheckout.paymentMethod,
+                        payLater: pendingCheckout.payLater,
+                    });
+                } catch (error) {
+                    printError = error instanceof Error ? error.message : "Unknown printer error.";
+                } finally {
+                    setIsPrintingOrder(false);
+                }
+
+                onCheckoutComplete();
+                setCheckoutOpen(false);
+                if (printError) {
+                    toast.error(`Checkout succeeded, but the order could not be printed: ${printError}`);
+                }
+                pendingCheckout.resolve(
+                    result.payLater
+                        ? `Order placed for payment later. Total due: ${formatPrice(checkout.totalAmount)}.`
+                        : `Checkout successful. ${formatPrice(checkout.payment.amount)} paid via ${checkout.payment_method}.`
+                );
+            })();
             return;
         }
 
@@ -278,14 +320,14 @@ export function ProccessOrderPanel({
                 ? "The checkout service returned an invalid total."
                 : "The checkout service returned an invalid response."
         ));
-    }, [checkoutFetcher.data, checkoutFetcher.state, cartSignature, formatPrice, onCheckoutComplete])
+    }, [checkoutFetcher.data, checkoutFetcher.state, cart, cartSignature, formatPrice, onCheckoutComplete])
 
     const handleCheckoutPayment = (
         paymentMethod: "cash" | "cashless",
         orderType: "dine_in" | "take_out" = "dine_in",
         payLater = false
     ) => {
-        if (checkoutFetcher.state !== "idle") return;
+        if (checkoutFetcher.state !== "idle" || isPrintingOrder) return;
 
         try {
             const savedCart = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -301,8 +343,32 @@ export function ProccessOrderPanel({
                 return;
             }
 
+            const printItems = cartData.items.map((storedLine) => {
+                const cartLine = cart.find((line) => line.menuId === storedLine.menu_id);
+                return {
+                    name: cartLine?.menu.name ?? storedLine.menu_id,
+                    quantity: storedLine.quantity,
+                    modifiers: (storedLine.modifiers ?? [])
+                        .filter((modifier) => modifier.quantity > 0)
+                        .map((storedModifier) => ({
+                            name: cartLine?.modifiers.find(
+                                (modifier) => modifier.modifierId === storedModifier.modifier_id
+                            )?.modifier.name ?? storedModifier.modifier_id,
+                            quantity: storedModifier.quantity,
+                        })),
+                };
+            });
+
             const checkoutPromise = new Promise<string | void>((resolve, reject) => {
-                checkoutToastRef.current = { intent: "checkout", resolve, reject };
+                checkoutToastRef.current = {
+                    intent: "checkout",
+                    items: printItems,
+                    paymentMethod,
+                    orderType,
+                    payLater,
+                    resolve,
+                    reject,
+                };
             });
             toast.promise(checkoutPromise, {
                 loading: "Processing payment...",
@@ -571,7 +637,8 @@ export function ProccessOrderPanel({
                 itemCount={itemCount}
                 totalAmount={backendTotal}
                 formatPrice={formatPrice}
-                isSubmitting={checkoutFetcher.state !== "idle" && checkoutOpen}
+                isSubmitting={checkoutFetcher.state !== "idle" || isPrintingOrder}
+                orderPrinterRef={orderPrinterRef}
                 onProcessPayment={handleCheckoutPayment}
             />
 
