@@ -8,9 +8,11 @@ export type OrderPrintRequest = {
   items: {
     name: string;
     quantity: number;
+    unitPrice?: number;
     modifiers: {
       name: string;
       quantity: number;
+      unitPrice?: number;
     }[];
   }[];
   totalAmount?: number;
@@ -209,7 +211,8 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         '********************************\n' +
         'Thank you for dining with us!\n' +
         'We hope to see you again soon!\n' +
-        'Have a sizzling day!'
+        'Have a sizzling day!\n' + 
+        '********************************\n\n'
       );
 
       const ALIGN_LEFT = new Uint8Array([
@@ -286,9 +289,15 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
 
       const orderLines = request.items.flatMap((item) => [
         ...wrapText(`${item.name} x${item.quantity}`),
-        ...item.modifiers.flatMap((modifier) =>
-          wrapText(`  + ${modifier.name} x${modifier.quantity}`)
-        ),
+        ...(item.unitPrice === undefined
+          ? []
+          : wrapText(`  @ PHP ${item.unitPrice.toFixed(2)} each = PHP ${(item.unitPrice * item.quantity).toFixed(2)}`)),
+        ...item.modifiers.flatMap((modifier) => [
+          ...wrapText(`  + ${modifier.name} x${modifier.quantity}`),
+          ...(modifier.unitPrice === undefined
+            ? []
+            : wrapText(`    @ PHP ${modifier.unitPrice.toFixed(2)} each = PHP ${(modifier.unitPrice * modifier.quantity).toFixed(2)}`)),
+        ]),
       ]);
       const itemContent = encoder.encode(`${orderLines.join('\n')}\n`);
       const orderDetails = encoder.encode(
@@ -296,9 +305,11 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         `${request.payLater ? 'PAY LATER' : request.isReprint ? 'PAID' : request.paymentMethod?.toUpperCase() ?? 'PAID'}\n` +
         (request.orderNumber === undefined ? '' : `ORDER #${request.orderNumber}\n`)
       );
-      const total = request.totalAmount === undefined
-        ? null
-        : encoder.encode(`TOTAL  PHP ${request.totalAmount.toFixed(2)}\n`);
+      const total = encoder.encode(
+        request.totalAmount === undefined
+          ? 'TOTAL  PRICE UNAVAILABLE\n'
+          : `TOTAL                 PHP ${request.totalAmount.toFixed(2)}\n`
+      );
       const title = encoder.encode('SEAR & SIZZLE\n');
       const website = encoder.encode('searensizzle.com\n');
       const reprintLabel = encoder.encode('***REPRINT***\n');
@@ -316,7 +327,8 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         '********************************\n' +
         'Thank you for dining with us!\n' +
         'We hope to see you again soon!\n' +
-        'Have a sizzling day!\n\n'
+        'Have a sizzling day!\n' + 
+        '********************************\n\n'
       );
 
       const payload = combineUint8Arrays([
@@ -340,14 +352,18 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         new Uint8Array([0x1b, 0x61, 0x00]),
         itemContent,
         encoder.encode(divider),
-        footer,
-        TEXT_SIZE_NORMAL,
-        FONT_SMALL,
-        ALIGN_CENTER,
-        disclaimer,
-        PAPER_FEED,
         new Uint8Array([0x1b, 0x61, 0x01]),
-          ...(total ? [TEXT_BOLD_ON, total, TEXT_BOLD_OFF] : []),
+        TEXT_BOLD_ON,
+        total,
+        TEXT_BOLD_OFF,
+        new Uint8Array([0x1b, 0x61, 0x00]),
+        footer,
+        ALIGN_CENTER,
+        FONT_SMALL,
+        disclaimer,
+        TEXT_SIZE_NORMAL,
+        new Uint8Array([0x1b, 0x61, 0x01]),
+        PAPER_FEED,
       ]);
 
       await writeInChunks(characteristic, payload, 100);

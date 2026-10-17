@@ -64,9 +64,11 @@ export type KitchenOrder = {
     order: {
         name: string;
         quantity: number;
+        unitPrice?: number;
         modifiers: {
             name: string;
             quantity: number;
+            unitPrice?: number;
         }[];
     }[];
 };

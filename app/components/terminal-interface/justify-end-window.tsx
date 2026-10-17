@@ -104,7 +104,8 @@ type PendingCheckout = (
         items: {
             name: string
             quantity: number
-            modifiers: { name: string; quantity: number }[]
+            unitPrice?: number
+            modifiers: { name: string; quantity: number; unitPrice?: number }[]
         }[]
         paymentMethod: "cash" | "cashless"
         orderType: "dine_in" | "take_out"
@@ -350,14 +351,19 @@ export function ProccessOrderPanel({
                 return {
                     name: cartLine?.menu.name ?? storedLine.menu_id,
                     quantity: storedLine.quantity,
+                    unitPrice: cartLine?.menu.selling_price,
                     modifiers: (storedLine.modifiers ?? [])
                         .filter((modifier) => modifier.quantity > 0)
-                        .map((storedModifier) => ({
-                            name: cartLine?.modifiers.find(
+                        .map((storedModifier) => {
+                            const matchedModifier = cartLine?.modifiers.find(
                                 (modifier) => modifier.modifierId === storedModifier.modifier_id
-                            )?.modifier.name ?? storedModifier.modifier_id,
-                            quantity: storedModifier.quantity,
-                        })),
+                            )?.modifier;
+                            return {
+                                name: matchedModifier?.name ?? storedModifier.modifier_id,
+                                quantity: storedModifier.quantity,
+                                unitPrice: matchedModifier?.price,
+                            };
+                        }),
                 };
             });
 

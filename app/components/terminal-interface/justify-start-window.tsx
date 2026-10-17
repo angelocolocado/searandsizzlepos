@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import api from "~/lib/axios";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
+import { getKitchenOrderPricing } from "~/lib/kitchen-order-pricing";
 import {
     Dialog,
     DialogContent,
@@ -121,7 +122,10 @@ export function MainView({
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
     const [cashReceived, setCashReceived] = useState("");
     const cashReceivedAmount = Number(cashReceived || 0);
-    const totalPayment = selectedOrder?.totalPayment ?? null;
+    const selectedOrderPricing = selectedOrder
+        ? getKitchenOrderPricing(selectedOrder, menuCategory)
+        : null;
+    const totalPayment = selectedOrderPricing?.totalAmount ?? null;
     const changeDue = totalPayment === null
         ? 0
         : Math.max(0, cashReceivedAmount - totalPayment);
@@ -291,16 +295,30 @@ export function MainView({
                                 </p>
                             ) : (
                                 <ul className="max-h-[45vh] space-y-2 overflow-y-auto">
-                                    {selectedOrder.order.map((item, itemIndex) => (
+                                    {selectedOrderPricing?.items.map((item, itemIndex) => (
                                         <li
                                             key={`${item.name}-${itemIndex}`}
                                             className="rounded-lg border bg-card p-3"
                                         >
                                             <div className="flex items-start justify-between gap-3">
-                                                <span className="text-sm font-medium">{item.name}</span>
-                                                <span className="shrink-0 text-sm font-semibold tabular-nums">
-                                                    × {item.quantity}
-                                                </span>
+                                                <div className="min-w-0">
+                                                    <span className="text-sm font-medium">{item.name}</span>
+                                                    {item.unitPrice !== undefined && (
+                                                        <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                                                            {formatPayment(item.unitPrice)} each
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="shrink-0 text-right">
+                                                    <span className="block text-sm font-semibold tabular-nums">
+                                                        × {item.quantity}
+                                                    </span>
+                                                    {item.unitPrice !== undefined && (
+                                                        <span className="text-xs text-muted-foreground tabular-nums">
+                                                            {formatPayment(item.unitPrice * item.quantity)}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             {item.modifiers.length > 0 && (
                                                 <ul className="mt-2 space-y-1 border-t pt-2">
@@ -309,9 +327,19 @@ export function MainView({
                                                             key={`${modifier.name}-${modifierIndex}`}
                                                             className="flex justify-between gap-3 text-xs text-muted-foreground"
                                                         >
-                                                            <span>{modifier.name}</span>
-                                                            <span className="shrink-0 tabular-nums">
+                                                            <span>
+                                                                {modifier.name}
+                                                                {modifier.unitPrice !== undefined && (
+                                                                    <span> · {formatPayment(modifier.unitPrice)} each</span>
+                                                                )}
+                                                            </span>
+                                                            <span className="shrink-0 text-right tabular-nums">
                                                                 × {modifier.quantity}
+                                                                {modifier.unitPrice !== undefined && (
+                                                                    <span className="block">
+                                                                        {formatPayment(modifier.unitPrice * modifier.quantity)}
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                         </li>
                                                     ))}
@@ -323,16 +351,12 @@ export function MainView({
                             )}
                         </section>
 
-                        {selectedOrder.payment_status === "pay_later" && (
-                            <div className="flex items-center justify-between gap-3 rounded-lg bg-orange-50 px-4 py-3 dark:bg-orange-950/30">
-                                <span className="text-sm font-medium">Total payment</span>
-                                <span className="text-base font-bold tabular-nums text-orange-800 dark:text-orange-300">
-                                    {selectedOrder.totalPayment === undefined
-                                        ? "—"
-                                        : formatPayment(selectedOrder.totalPayment)}
-                                </span>
-                            </div>
-                        )}
+                        <div className="flex items-center justify-between gap-3 rounded-lg bg-orange-50 px-4 py-3 dark:bg-orange-950/30">
+                            <span className="text-sm font-medium">Total payment</span>
+                            <span className="text-base font-bold tabular-nums text-orange-800 dark:text-orange-300">
+                                {totalPayment === null ? "Price unavailable" : formatPayment(totalPayment)}
+                            </span>
+                        </div>
 
                         {isPayMethodSelectionOpen ? (
                             <section className="space-y-3 border-t pt-4">

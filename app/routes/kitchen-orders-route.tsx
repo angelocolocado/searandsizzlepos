@@ -10,11 +10,15 @@ function isKitchenOrder(value: unknown): value is KitchenOrder {
     const validItems = Array.isArray(order.order) && order.order.every((item: unknown) => {
         if (typeof item !== "object" || item === null) return false;
         const menuItem = item as Record<string, unknown>;
+        const validUnitPrice = (price: unknown) =>
+            price === undefined ||
+            (typeof price === "number" && Number.isFinite(price) && price >= 0);
         return (
             typeof menuItem.name === "string" &&
             typeof menuItem.quantity === "number" &&
             Number.isInteger(menuItem.quantity) &&
             menuItem.quantity >= 1 &&
+            validUnitPrice(menuItem.unitPrice) &&
             Array.isArray(menuItem.modifiers) &&
             menuItem.modifiers.every((modifier: unknown) => {
                 if (typeof modifier !== "object" || modifier === null) return false;
@@ -23,7 +27,8 @@ function isKitchenOrder(value: unknown): value is KitchenOrder {
                     typeof selectedModifier.name === "string" &&
                     typeof selectedModifier.quantity === "number" &&
                     Number.isInteger(selectedModifier.quantity) &&
-                    selectedModifier.quantity >= 1
+                    selectedModifier.quantity >= 1 &&
+                    validUnitPrice(selectedModifier.unitPrice)
                 );
             })
         );
@@ -39,6 +44,10 @@ function isKitchenOrder(value: unknown): value is KitchenOrder {
         typeof order.elapsed === "string" &&
         (order.type === "Dine in" || order.type === "Take out") &&
         (order.payment_status === "paid" || order.payment_status === "pay_later") &&
+        (order.totalPayment === undefined ||
+            (typeof order.totalPayment === "number" &&
+                Number.isFinite(order.totalPayment) &&
+                order.totalPayment >= 0)) &&
         validItems &&
         (order.payment_status !== "pay_later" ||
             (typeof order.totalPayment === "number" &&

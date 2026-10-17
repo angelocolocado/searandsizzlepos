@@ -11,6 +11,7 @@ import {
     parseStoredOrderCart,
     type StoredOrderLine,
 } from "~/lib/order-cart-storage";
+import { getKitchenOrderPricing } from "~/lib/kitchen-order-pricing";
 import type { OrderPrinterHandle } from "./print-service/thermal-printer";
 
 type TerminalInterfaceProps = {
@@ -194,18 +195,21 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             if (!printer) {
                 throw new Error("Order printer is unavailable. Connect it before reprinting.");
             }
+            const pricing = getKitchenOrderPricing(orderToReprint, menuCategory);
 
             await printer.handleReprintOrder({
                 orderNumber: orderToReprint.orderNumber,
-                items: orderToReprint.order.map((item) => ({
+                items: pricing.items.map((item) => ({
                     name: item.name,
                     quantity: item.quantity,
+                    unitPrice: item.unitPrice,
                     modifiers: item.modifiers.map((modifier) => ({
                         name: modifier.name,
                         quantity: modifier.quantity,
+                        unitPrice: modifier.unitPrice,
                     })),
                 })),
-                totalAmount: orderToReprint.totalPayment,
+                totalAmount: pricing.totalAmount,
                 orderType: orderToReprint.type === "Dine in" ? "dine_in" : "take_out",
                 payLater: orderToReprint.payment_status.toLowerCase() !== "paid",
             });
@@ -218,7 +222,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     : "Could not reprint the order."
             );
         }
-    }, []);
+    }, [menuCategory]);
 
     const kitchenOrders = kitchenOrdersFetcher.data &&
         "orders" in kitchenOrdersFetcher.data &&
