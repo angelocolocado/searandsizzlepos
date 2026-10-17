@@ -32,9 +32,10 @@ function isKitchenOrder(value: unknown): value is KitchenOrder {
     return (
         typeof order.orderNumber === "number" &&
         Number.isInteger(order.orderNumber) &&
-        typeof order.itemCount === "number" &&
-        Number.isInteger(order.itemCount) &&
-        order.itemCount >= 0 &&
+        (order.itemCount === null ||
+            (typeof order.itemCount === "number" &&
+                Number.isInteger(order.itemCount) &&
+                order.itemCount >= 0)) &&
         typeof order.elapsed === "string" &&
         (order.type === "Dine in" || order.type === "Take out") &&
         (order.payment_status === "paid" || order.payment_status === "pay_later") &&

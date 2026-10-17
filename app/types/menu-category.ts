@@ -56,7 +56,7 @@ export type CheckoutSuccessResponse = {
 
 export type KitchenOrder = {
     orderNumber: number;
-    itemCount: number;
+    itemCount: number | null;
     elapsed: string;
     type: "Dine in" | "Take out";
     payment_status: "paid" | "pay_later";
