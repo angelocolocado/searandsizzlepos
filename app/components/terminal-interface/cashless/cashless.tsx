@@ -1,11 +1,12 @@
 import { CircleX, Printer, QrCode, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react"
-import { useFetcher, useNavigation } from "react-router";
+import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
 import { echo } from "~/lib/echo";
 import { CART_STORAGE_KEY } from "~/lib/order-cart-storage";
 import { AnimatedCheckmark } from "~/components/animations/checkmark";
+import ButtonPrint from "../print-service/thermal-printer";
 
 type ComponentProps = {
     amount: number
@@ -140,10 +141,8 @@ export default function CashlessWindow({ amount } : ComponentProps){
                     <img src={qrCodeUrl} alt="QR Ph Code" style={{ width: '250px', height: '250px' }} />
                     <p className="text-[10px] font-light">Screen will automatically update or perform manually check.</p>
 
-                    <div className="w-full flex gap-2 items-center justify-center mt-5">
-                        <Button disabled={isLoading} className="bg-green-900 text-white hover:bg-green-700">
-                            {isLoading ? <><Spinner /> Generating QR</> : <><Printer /> Print Receipt</>}
-                        </Button>
+                    <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
+                        <ButtonPrint mode="print_qr" text="Print Receipt" isDisabled={isLoading} qr_object={qrCodeUrl} />
                         <Button disabled={isLoading} className="bg-green-900 text-white hover:bg-green-700">
                             {isLoading ? <><Spinner /> Generating QR</> : <><RotateCcw /> Manual Check</>}
                         </Button>
