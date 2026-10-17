@@ -1,5 +1,4 @@
 import { useState } from "react";
-import type { RefObject } from "react";
 import { ArrowLeft, Banknote, Check, CreditCard } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
@@ -11,7 +10,6 @@ import {
 } from "~/components/ui/dialog";
 import type { OrderLine } from "~/types/menu-category";
 import CashlessWindow from "./cashless/cashless";
-import ButtonPrint, { type OrderPrinterHandle } from "./print-service/thermal-printer";
 
 type OrderType = "dine-in" | "takeout";
 type PaymentMethod = "cash" | "cashless";
@@ -24,7 +22,6 @@ type ComponentProps = {
     totalAmount: number | null
     formatPrice: (price: number) => string
     isSubmitting: boolean
-    orderPrinterRef: RefObject<OrderPrinterHandle | null>
     onProcessPayment: (
         paymentMethod: PaymentMethod,
         orderType: "dine_in" | "take_out",
@@ -40,7 +37,6 @@ export function CheckoutReviewDialog({
     totalAmount,
     formatPrice,
     isSubmitting,
-    orderPrinterRef,
     onProcessPayment,
 }: ComponentProps) {
     const [orderType, setOrderType] = useState<OrderType>("dine-in")
@@ -303,23 +299,15 @@ export function CheckoutReviewDialog({
                     {paymentMethod === "cashless" && !payLater && totalAmount !== null ? <CashlessWindow amount={totalAmount} /> : <></>}
 
                     <div className="col-span-full flex flex-col-reverse gap-2 border-t bg-background p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 md:px-5 lg:px-6">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                className="h-10 gap-2"
-                                onClick={() => onOpenChange(false)}
-                            >
-                                <ArrowLeft className="size-4" />
-                                Back to order
-                            </Button>
-                            <ButtonPrint
-                                ref={orderPrinterRef}
-                                mode="print_order"
-                                text="Print Order"
-                                isDisabled={isSubmitting}
-                            />
-                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-10 gap-2"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            <ArrowLeft className="size-4" />
+                            Back to order
+                        </Button>
                         <Button
                             type="button"
                             className="h-11 bg-green-600 px-6 text-white hover:bg-green-700"

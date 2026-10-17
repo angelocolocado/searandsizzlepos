@@ -4,11 +4,13 @@ import { DineInCard } from "./tabs/dine-in-card";
 import { MenuCategoryBrowser } from "./menu-category-browser";
 import type { KitchenOrder, MenuCategory, MenuItem } from "~/types/menu-category";
 import { useState } from "react";
+import type { RefObject } from "react";
 import axios from "axios";
-import { Banknote, Check, CreditCard } from "lucide-react";
+import { Banknote, Check, CreditCard, Printer } from "lucide-react";
 import { toast } from "sonner";
 import api from "~/lib/axios";
 import { Button } from "~/components/ui/button";
+import { Spinner } from "~/components/ui/spinner";
 import {
     Dialog,
     DialogContent,
@@ -22,6 +24,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "~/components/ui/select";
+import ButtonPrint, { type OrderPrinterHandle } from "./print-service/thermal-printer";
 
 const VOID_REASONS = [
     { value: "1", label: "Customer Changed Mind" },
@@ -58,7 +61,8 @@ const formatPayment = (amount: number) =>
     }).format(amount);
 
 function OrderRail({ orders, onSelectOrder }: {
-    orders: KitchenOrder[], onSelectOrder: (order: KitchenOrder) => void;
+    orders: KitchenOrder[],
+    onSelectOrder: (order: KitchenOrder) => void;
 }) {
     if (orders.length === 0) {
         return (
@@ -90,6 +94,8 @@ type ComponentProp = {
     ordersError: string | null
     ordersLoading: boolean
     onKitchenOrderUpdated: () => void
+    orderPrinterRef: RefObject<OrderPrinterHandle | null>
+    onReprintOrder: (order: KitchenOrder) => Promise<void>
 }
 
 export function MainView({
@@ -101,12 +107,15 @@ export function MainView({
     ordersError,
     ordersLoading,
     onKitchenOrderUpdated,
+    orderPrinterRef,
+    onReprintOrder,
 }: ComponentProp){
 
 
     const [selectedOrder, setSelectedOrder] = useState<KitchenOrder | null>(null);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isActionSubmitting, setIsActionSubmitting] = useState(false);
+    const [isReprintingOrder, setIsReprintingOrder] = useState(false);
     const [voidReason, setVoidReason] = useState<string | null>(null);
     const [isPayMethodSelectionOpen, setIsPayMethodSelectionOpen] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
@@ -137,6 +146,17 @@ export function MainView({
         setPaymentMethod(null);
         setCashReceived("");
         setIsDialogOpen(true);
+    };
+
+    const handleReprintSelectedOrder = async () => {
+        if (!selectedOrder || isReprintingOrder) return;
+
+        setIsReprintingOrder(true);
+        try {
+            await onReprintOrder(selectedOrder);
+        } finally {
+            setIsReprintingOrder(false);
+        }
     };
 
     const handleOrderStatus = async (status: "cooked" | "void") => {
@@ -201,9 +221,17 @@ export function MainView({
                     <p className="text-sm font-semibold">Kitchen orders</p>
                     {ordersLoading && <span className="text-xs text-muted-foreground">Refreshing…</span>}
                 </div>
-                {ordersError && (
-                    <p role="alert" className="text-xs text-destructive">{ordersError}</p>
-                )}
+                <div className="flex items-center gap-3">
+                    {ordersError && (
+                        <p role="alert" className="text-xs text-destructive">{ordersError}</p>
+                    )}
+                    <ButtonPrint
+                        ref={orderPrinterRef}
+                        mode="print_order"
+                        text="Print Order"
+                        isDisabled={false}
+                    />
+                </div>
             </div>
             <Tabs defaultValue="all" className="w-full gap-3 flex flex-col">
                 <TabsList variant="line" className="h-auto w-full justify-start gap-5 border-b px-0 pb-0">
@@ -451,6 +479,16 @@ export function MainView({
                                 >
                                     <Check />
                                     {isActionSubmitting ? "Updating order..." : "Mark as cooked"}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full"
+                                    disabled={isReprintingOrder || isActionSubmitting}
+                                    onClick={handleReprintSelectedOrder}
+                                >
+                                    {isReprintingOrder ? <Spinner /> : <Printer />}
+                                    {isReprintingOrder ? "Reprinting order..." : "Reprint order"}
                                 </Button>
 
                                 <div className="space-y-2">

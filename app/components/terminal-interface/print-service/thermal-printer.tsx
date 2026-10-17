@@ -4,6 +4,7 @@ import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 
 export type OrderPrintRequest = {
+  orderNumber?: number;
   items: {
     name: string;
     quantity: number;
@@ -12,14 +13,16 @@ export type OrderPrintRequest = {
       quantity: number;
     }[];
   }[];
-  totalAmount: number;
+  totalAmount?: number;
   orderType: "dine_in" | "take_out";
-  paymentMethod: "cash" | "cashless";
+  paymentMethod?: "cash" | "cashless";
   payLater: boolean;
+  isReprint?: boolean;
 };
 
 export type OrderPrinterHandle = {
   handleOrderPrint: (request: OrderPrintRequest) => Promise<void>;
+  handleReprintOrder: (request: OrderPrintRequest) => Promise<void>;
 };
 
 type WritableCharacteristic = {
@@ -58,6 +61,7 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
   const [status, setStatus] = useState('Disconnected');
   const [loading, setLoading] = useState(false);
 
+  const FONT_SMALL = new Uint8Array([0x1b, 0x21, 0x01]);
   const TEXT_SIZE_DOUBLE = new Uint8Array([0x1d, 0x21, 0x11]); // 2x Width & 2x Height (Pinaka-bagay sa Title)
   const TEXT_SIZE_NORMAL = new Uint8Array([0x1d, 0x21, 0x00]); // Reset pabalik sa normal size
   const ESC_INIT = new Uint8Array([0x1b, 0x40]); // Reset & Initialize Printer
@@ -205,7 +209,7 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         '********************************\n' +
         'Thank you for dining with us!\n' +
         'We hope to see you again soon!\n' +
-        'Have a sizzling day!\n\n'
+        'Have a sizzling day!'
       );
 
       const ALIGN_LEFT = new Uint8Array([
@@ -213,9 +217,9 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
       ]);
 
       const payload = combineUint8Arrays([
-        TEXT_SIZE_DOUBLE,
         ESC_INIT,
         ALIGN_CENTER,
+        TEXT_SIZE_DOUBLE,
         TEXT_BOLD_ON,
         title,
         TEXT_BOLD_OFF,
@@ -255,7 +259,7 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
 
     try {
       setLoading(true);
-      setStatus('Printing order receipt...');
+      setStatus('Printing order slip...');
 
       const encoder = new TextEncoder();
       const divider = '--------------------------------\n';
@@ -289,11 +293,24 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
       const itemContent = encoder.encode(`${orderLines.join('\n')}\n`);
       const orderDetails = encoder.encode(
         `${request.orderType === 'dine_in' ? 'DINE IN' : 'TAKE OUT'}\n` +
-        `${request.payLater ? 'PAY LATER' : request.paymentMethod.toUpperCase()}\n`
+        `${request.payLater ? 'PAY LATER' : request.isReprint ? 'PAID' : request.paymentMethod?.toUpperCase() ?? 'PAID'}\n` +
+        (request.orderNumber === undefined ? '' : `ORDER #${request.orderNumber}\n`)
       );
-      const total = encoder.encode(`TOTAL  PHP ${request.totalAmount.toFixed(2)}\n`);
+      const total = request.totalAmount === undefined
+        ? null
+        : encoder.encode(`TOTAL  PHP ${request.totalAmount.toFixed(2)}\n`);
       const title = encoder.encode('SEAR & SIZZLE\n');
       const website = encoder.encode('searensizzle.com\n');
+      const reprintLabel = encoder.encode('***REPRINT***\n');
+
+      const disclaimer = encoder.encode(
+        '--------------------------------\n' +
+        '  THIS IS NOT AN OFFICIAL RECEIPT \n' +
+        ' NOT VALID FOR CLAIM OF INPUT TAX \n' +
+        '  FOR ORDER CONFIRMATION ONLY   \n' +
+        '--------------------------------\n'
+      );
+
       const footer = encoder.encode(
         '\n' +
         '********************************\n' +
@@ -306,25 +323,31 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         ESC_INIT,
         ALIGN_CENTER,
         TEXT_BOLD_ON,
+        TEXT_SIZE_DOUBLE,
         title,
+        TEXT_SIZE_NORMAL,
         TEXT_BOLD_OFF,
         website,
+        ...(request.isReprint
+          ? [TEXT_BOLD_ON, reprintLabel, TEXT_BOLD_OFF]
+          : []),
         encoder.encode(divider),
         TEXT_BOLD_ON,
-        encoder.encode('ORDER RECEIPT\n'),
+        encoder.encode('ORDER SLIP\n'),
         TEXT_BOLD_OFF,
         orderDetails,
         encoder.encode(divider),
         new Uint8Array([0x1b, 0x61, 0x00]),
         itemContent,
         encoder.encode(divider),
-        new Uint8Array([0x1b, 0x61, 0x01]),
-        TEXT_BOLD_ON,
-        total,
-        TEXT_BOLD_OFF,
-        encoder.encode(divider),
         footer,
+        TEXT_SIZE_NORMAL,
+        FONT_SMALL,
+        ALIGN_CENTER,
+        disclaimer,
         PAPER_FEED,
+        new Uint8Array([0x1b, 0x61, 0x01]),
+          ...(total ? [TEXT_BOLD_ON, total, TEXT_BOLD_OFF] : []),
       ]);
 
       await writeInChunks(characteristic, payload, 100);
@@ -338,7 +361,14 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
     }
   };
 
-  useImperativeHandle(ref, () => ({ handleOrderPrint }), [handleOrderPrint]);
+  const handleReprintOrder = async (request: OrderPrintRequest) => {
+    await handleOrderPrint({ ...request, isReprint: true });
+  };
+
+  useImperativeHandle(ref, () => ({ handleOrderPrint, handleReprintOrder }), [
+    handleOrderPrint,
+    handleReprintOrder,
+  ]);
 
   const combineUint8Arrays = (arrays: Uint8Array[]) => {
     const totalLength = arrays.reduce((acc, curr) => acc + curr.length, 0);

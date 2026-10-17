@@ -1,8 +1,9 @@
 import { ProccessOrderPanel } from "./justify-end-window";
 import { MainView } from "./justify-start-window";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
-import type { MenuCategory, MenuItem, OrderLine } from "~/types/menu-category";
+import type { KitchenOrder, MenuCategory, MenuItem, OrderLine } from "~/types/menu-category";
+import { toast } from "sonner";
 import type { clientLoader as kitchenOrdersClientLoader } from "~/routes/kitchen-orders-route";
 import {
     CART_STORAGE_KEY,
@@ -10,6 +11,7 @@ import {
     parseStoredOrderCart,
     type StoredOrderLine,
 } from "~/lib/order-cart-storage";
+import type { OrderPrinterHandle } from "./print-service/thermal-printer";
 
 type TerminalInterfaceProps = {
     menuCategory?: MenuCategory;
@@ -27,6 +29,7 @@ function withoutZeroModifiers(line: StoredOrderLine): StoredOrderLine {
 export default function TerminalInterface({ menuCategory }: TerminalInterfaceProps){
 
     const kitchenOrdersFetcher = useFetcher<typeof kitchenOrdersClientLoader>();
+    const orderPrinterRef = useRef<OrderPrinterHandle>(null);
     const [isPrcOrderPanelOpen, setIsPrcOrderPanelOpen] = useState(false)
     const [order, setOrder] = useState<StoredOrderLine[]>([])
     const [cartUuid, setCartUuid] = useState("")
@@ -185,6 +188,38 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         }
     }, [])
 
+    const handleReprintOrder = useCallback(async (orderToReprint: KitchenOrder) => {
+        try {
+            const printer = orderPrinterRef.current;
+            if (!printer) {
+                throw new Error("Order printer is unavailable. Connect it before reprinting.");
+            }
+
+            await printer.handleReprintOrder({
+                orderNumber: orderToReprint.orderNumber,
+                items: orderToReprint.order.map((item) => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    modifiers: item.modifiers.map((modifier) => ({
+                        name: modifier.name,
+                        quantity: modifier.quantity,
+                    })),
+                })),
+                totalAmount: orderToReprint.totalPayment,
+                orderType: orderToReprint.type === "Dine in" ? "dine_in" : "take_out",
+                payLater: orderToReprint.payment_status.toLowerCase() !== "paid",
+            });
+            toast.success(`Order #${orderToReprint.orderNumber} reprinted.`);
+        } catch (error) {
+            console.error("Unable to reprint kitchen order.", error);
+            toast.error(
+                error instanceof Error
+                    ? error.message
+                    : "Could not reprint the order."
+            );
+        }
+    }, []);
+
     const kitchenOrders = kitchenOrdersFetcher.data &&
         "orders" in kitchenOrdersFetcher.data &&
         Array.isArray(kitchenOrdersFetcher.data.orders)
@@ -207,6 +242,8 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     orders={kitchenOrders}
                     ordersError={kitchenOrdersError}
                     ordersLoading={kitchenOrdersFetcher.state !== "idle"}
+                    orderPrinterRef={orderPrinterRef}
+                    onReprintOrder={handleReprintOrder}
                     onKitchenOrderUpdated={() => setKitchenOrdersRefreshKey((current) => current + 1)}
                 />
             </div>
@@ -233,6 +270,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     onModifierQuantityChange={updateModifierQuantity}
                     onRemoveMenu={removeMenu}
                     onCheckoutComplete={clearOrderAfterCheckout}
+                    orderPrinterRef={orderPrinterRef}
                 />
             </div>
         </div>

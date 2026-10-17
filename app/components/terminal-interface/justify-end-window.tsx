@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import {
     Info,
     Minus,
@@ -88,6 +89,7 @@ type ComponentProps = {
     onModifierQuantityChange: (menuId: string, modifierId: string, quantity: number) => void
     onRemoveMenu: (menuId: string) => void
     onCheckoutComplete: () => void
+    orderPrinterRef: RefObject<OrderPrinterHandle | null>
 }
 
 type CheckoutToast = {
@@ -119,11 +121,11 @@ export function ProccessOrderPanel({
     onModifierQuantityChange,
     onRemoveMenu,
     onCheckoutComplete,
+    orderPrinterRef,
 }: ComponentProps) {
     const fetcher = useFetcher<typeof clientAction>()
     const checkoutFetcher = useFetcher<typeof checkoutClientAction>()
     const checkoutToastRef = useRef<PendingCheckout | null>(null)
-    const orderPrinterRef = useRef<OrderPrinterHandle>(null)
     const [infoMenuId, setInfoMenuId] = useState<string | null>(null)
     const [removalLine, setRemovalLine] = useState<OrderLine | null>(null)
     const [checkoutOpen, setCheckoutOpen] = useState(false)
@@ -638,7 +640,6 @@ export function ProccessOrderPanel({
                 totalAmount={backendTotal}
                 formatPrice={formatPrice}
                 isSubmitting={checkoutFetcher.state !== "idle" || isPrintingOrder}
-                orderPrinterRef={orderPrinterRef}
                 onProcessPayment={handleCheckoutPayment}
             />
 
