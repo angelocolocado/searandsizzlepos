@@ -2,6 +2,7 @@ import { type RouteConfig, index, layout, route } from "@react-router/dev/routes
 
 export default [
 
+    route("/process-cashless", "routes/cashless/cashless-route.tsx"),
     route("/login", "routes/authentication/login.tsx"),
     route("/logout", "routes/authentication/logout.tsx"),
     route("/two-factor-challenge", "routes/authentication/2fa-challenge.tsx"),

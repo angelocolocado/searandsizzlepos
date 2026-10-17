@@ -23,6 +23,12 @@ import type { CheckoutCartLine, MenuItem } from "~/types/menu-category";
 import type { clientAction } from "~/routes/cart/fetch-cartdata-route";
 import type { clientAction as checkoutClientAction } from "~/routes/checkout/checkout-route";
 import { CheckoutReviewDialog } from "./checkout-review-dialog";
+import {
+    CART_STORAGE_KEY,
+    createCartUuid,
+    parseStoredOrderCart,
+    type StoredOrderCart,
+} from "~/lib/order-cart-storage";
 
 function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
     if (typeof value !== "object" || value === null) return false;
@@ -148,27 +154,37 @@ export function ProccessOrderPanel({
         if (checkoutFetcher.state !== "idle") return;
 
         try {
-            const savedCart = window.localStorage.getItem("searsizzle-pos-order-cart");
-            const cartData: unknown = savedCart ? JSON.parse(savedCart) : [];
+            const savedCart = window.localStorage.getItem(CART_STORAGE_KEY);
+            const cartData = savedCart
+                ? parseStoredOrderCart(JSON.parse(savedCart))
+                : { cart_uuid: createCartUuid(), items: [] };
 
             if (
-                !Array.isArray(cartData) ||
-                cartData.length === 0 ||
-                !cartData.every(isCheckoutCartLine)
+                !Array.isArray(cartData.items) ||
+                cartData.items.length === 0 ||
+                !cartData.items.every(isCheckoutCartLine)
             ) {
                 toast.error("Add a valid item to the order before preparing checkout.");
                 return;
             }
 
-            const submittedCartSignature = JSON.stringify(cartData.map((line) => ({
+            const submittedCart: StoredOrderCart = {
+                cart_uuid: cartData.cart_uuid,
+                items: cartData.items.map((line) => ({
+                    ...line,
+                    ...(line.modifiers
+                        ? {
+                            modifiers: line.modifiers.filter(
+                                (modifier) => modifier.quantity > 0
+                            ),
+                        }
+                        : {}),
+                })),
+            };
+            const submittedCartSignature = JSON.stringify(submittedCart.items.map((line) => ({
                 menu_id: line.menu_id,
                 quantity: line.quantity,
-                modifiers: (line.modifiers ?? [])
-                    .filter((modifier) => modifier.quantity > 0)
-                    .map((modifier) => ({
-                        modifier_id: modifier.modifier_id,
-                        quantity: modifier.quantity,
-                    })),
+                modifiers: line.modifiers ?? [],
             })))
 
             const checkoutPromise = new Promise<string | void>((resolve, reject) => {
@@ -185,7 +201,7 @@ export function ProccessOrderPanel({
             checkoutFetcher.submit(
                 {
                     intent: "handle_recalculate",
-                    cart: JSON.stringify(cartData),
+                    cart: JSON.stringify(submittedCart),
                     cart_signature: submittedCartSignature,
                 },
                 { method: "POST", action: "/checkout" }
@@ -272,13 +288,14 @@ export function ProccessOrderPanel({
         if (checkoutFetcher.state !== "idle") return;
 
         try {
-            const savedCart = window.localStorage.getItem("searsizzle-pos-order-cart");
-            const cartData: unknown = savedCart ? JSON.parse(savedCart) : [];
+            const savedCart = window.localStorage.getItem(CART_STORAGE_KEY);
+            const cartData = savedCart
+                ? parseStoredOrderCart(JSON.parse(savedCart))
+                : { cart_uuid: createCartUuid(), items: [] };
 
             if (
-                !Array.isArray(cartData) ||
-                cartData.length === 0 ||
-                !cartData.every(isCheckoutCartLine)
+                cartData.items.length === 0 ||
+                !cartData.items.every(isCheckoutCartLine)
             ) {
                 toast.error("The saved order is invalid. Review the order and try again.");
                 return;
@@ -341,25 +358,10 @@ export function ProccessOrderPanel({
 
     useEffect(() => {
         try {
-            const savedOrder = window.localStorage.getItem("searsizzle-pos-order-cart");
-            const orderData: unknown = savedOrder ? JSON.parse(savedOrder) : [];
-
-            if (
-                !Array.isArray(orderData) ||
-                !orderData.every(
-                    (line: unknown) =>
-                        typeof line === "object" &&
-                        line !== null &&
-                        "menu_id" in line &&
-                        typeof line.menu_id === "string" &&
-                        "quantity" in line &&
-                        typeof line.quantity === "number" &&
-                        Number.isInteger(line.quantity) &&
-                        line.quantity >= 1
-                )
-            ) {
-                throw new Error("Saved cart entries must have a menu_id and a positive quantity.");
-            }
+            const savedOrder = window.localStorage.getItem(CART_STORAGE_KEY);
+            const orderData = savedOrder
+                ? parseStoredOrderCart(JSON.parse(savedOrder)).items
+                : [];
 
             const menuIds = [...new Set(orderData.map((line) => line.menu_id))];
             if (menuIds.length === 0) return;
@@ -371,7 +373,10 @@ export function ProccessOrderPanel({
         } catch (error) {
             console.error("Unable to read saved cart data.", error);
             toast.error("Invalid cart data. Cart has been reset.");
-            window.localStorage.setItem("searsizzle-pos-order-cart", "[]");
+            window.localStorage.setItem(
+                CART_STORAGE_KEY,
+                JSON.stringify({ cart_uuid: createCartUuid(), items: [] })
+            );
         }
     }, [])
 

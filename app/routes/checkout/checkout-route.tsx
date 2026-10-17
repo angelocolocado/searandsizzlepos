@@ -7,6 +7,7 @@ import type {
     CheckoutPrepareResponse,
     CheckoutSuccessResponse,
 } from "~/types/menu-category";
+import type { StoredOrderCart } from "~/lib/order-cart-storage";
 
 function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
     if (typeof value !== "object" || value === null) return false;
@@ -29,6 +30,19 @@ function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
                         modifier.quantity >= 0
                     );
                 })))
+    );
+}
+
+function isCheckoutCart(value: unknown): value is StoredOrderCart {
+    if (typeof value !== "object" || value === null) return false;
+
+    const cart = value as Record<string, unknown>;
+    return (
+        typeof cart.cart_uuid === "string" &&
+        cart.cart_uuid.length > 0 &&
+        Array.isArray(cart.items) &&
+        cart.items.length > 0 &&
+        cart.items.every(isCheckoutCartLine)
     );
 }
 
@@ -123,25 +137,24 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
         return data({ error: "Cart data is not valid JSON." }, { status: 400 });
     }
 
-    if (
-        !Array.isArray(submittedCart) ||
-        submittedCart.length === 0 ||
-        !submittedCart.every(isCheckoutCartLine)
-    ) {
+    if (!isCheckoutCart(submittedCart)) {
         return data(
-            { error: "Checkout requires a non-empty cart with valid menu and modifier quantities." },
+            { error: "Checkout requires a cart UUID and valid menu and modifier quantities." },
             { status: 400 }
         );
     }
 
-    const cart = submittedCart.map((line) => {
-        const modifiers = line.modifiers?.filter((modifier) => modifier.quantity > 0);
-        return {
-            menu_id: line.menu_id,
-            quantity: line.quantity,
-            ...(modifiers?.length ? { modifiers } : {}),
-        };
-    });
+    const cart: StoredOrderCart = {
+        cart_uuid: submittedCart.cart_uuid,
+        items: submittedCart.items.map((line) => {
+            const modifiers = line.modifiers?.filter((modifier) => modifier.quantity > 0);
+            return {
+                menu_id: line.menu_id,
+                quantity: line.quantity,
+                ...(modifiers?.length ? { modifiers } : {}),
+            };
+        }),
+    };
 
     try {
         if (formIntent === "handle_checkout") {
@@ -149,10 +162,11 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
             const response = await api.post<unknown>(
                 payLater ? "v1/pay-later" : "v1/checkout",
                 {
-                intent: "checkout",
-                order_type: orderType,
-                payment_method: paymentMethod,
-                cart,
+                    intent: "checkout",
+                    order_type: orderType,
+                    payment_method: paymentMethod,
+                    cart_uuid: cart.cart_uuid,
+                    items: cart.items,
                 }
             );
 
@@ -177,7 +191,8 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
 
         const response = await api.post<unknown>("v1/checkout", {
             intent: "prepare",
-            cart,
+            cart_uuid: cart.cart_uuid,
+            items: cart.items,
         });
 
         if (!isCheckoutPrepareResponse(response.data)) {

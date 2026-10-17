@@ -9,6 +9,7 @@ import {
     DialogTitle,
 } from "~/components/ui/dialog";
 import type { OrderLine } from "~/types/menu-category";
+import CashlessWindow from "./cashless/cashless";
 
 type OrderType = "dine-in" | "takeout";
 type PaymentMethod = "cash" | "cashless";
@@ -64,7 +65,6 @@ export function CheckoutReviewDialog({
     const selectPaymentMethod = (method: PaymentMethod) => {
         setPaymentMethod(method);
         setCashReceived("");
-        console.log("Payment method selected:", method);
     }
 
     const processPayment = () => {
@@ -234,7 +234,18 @@ export function CheckoutReviewDialog({
                         </div>
                     </section>
 
-                    {paymentMethod === "cash" && !payLater && totalAmount !== null ? (
+                    {!paymentMethod && 
+                        <section className="flex min-w-0 flex-col items-center justify-center border-t bg-muted/20 p-5 text-center md:col-start-2 lg:col-start-auto lg:border-t-0 lg:border-l">
+                            <span className="mb-3 flex size-11 items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
+                                <Banknote />
+                            </span>
+                            <p className="font-semibold">
+                                Select a payment method
+                            </p>
+                        </section>
+                    }
+
+                    {paymentMethod === "cash" && !payLater && totalAmount !== null && (
                         <section className="flex min-w-0 flex-col border-t bg-muted/20 p-4 sm:p-5 md:col-start-2 lg:col-start-auto lg:border-t-0 lg:border-l lg:p-6">
                             <div className="mb-3">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -281,27 +292,9 @@ export function CheckoutReviewDialog({
                                 </p>
                             )}
                         </section>
-                    ) : (
-                        <section className="flex min-w-0 flex-col items-center justify-center border-t bg-muted/20 p-5 text-center md:col-start-2 lg:col-start-auto lg:border-t-0 lg:border-l">
-                            <span className="mb-3 flex size-11 items-center justify-center rounded-full bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
-                                {paymentMethod === "cashless" ? <CreditCard /> : <Banknote />}
-                            </span>
-                            <p className="font-semibold">
-                                {payLater
-                                    ? "Payment will be collected later"
-                                    : paymentMethod === "cashless"
-                                        ? "Cashless payment"
-                                        : "Select a payment method"}
-                            </p>
-                            <p className="mt-1 max-w-52 text-sm text-muted-foreground">
-                                {payLater
-                                    ? "The kitchen order will be recorded as unpaid."
-                                    : paymentMethod === "cashless"
-                                        ? "No cash calculator is needed for this payment."
-                                        : "Choose cash to enter the amount received."}
-                            </p>
-                        </section>
                     )}
+
+                    {paymentMethod === "cashless" && !payLater && totalAmount !== null ? <CashlessWindow amount={totalAmount} /> : <></>}
 
                     <div className="col-span-full flex flex-col-reverse gap-2 border-t bg-background p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 md:px-5 lg:px-6">
                         <Button

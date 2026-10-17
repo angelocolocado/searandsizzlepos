@@ -4,46 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 import type { MenuCategory, MenuItem, OrderLine } from "~/types/menu-category";
 import type { clientLoader as kitchenOrdersClientLoader } from "~/routes/kitchen-orders-route";
+import {
+    CART_STORAGE_KEY,
+    createCartUuid,
+    parseStoredOrderCart,
+    type StoredOrderLine,
+} from "~/lib/order-cart-storage";
 
 type TerminalInterfaceProps = {
     menuCategory?: MenuCategory;
-}
-
-type StoredOrderLine = {
-    menu_id: string;
-    quantity: number;
-    modifiers?: StoredModifierQuantity[];
-}
-
-type StoredModifierQuantity = {
-    modifier_id: string;
-    quantity: number;
-}
-
-const CART_STORAGE_KEY = "searsizzle-pos-order-cart";
-
-function isStoredOrderLine(value: unknown): value is StoredOrderLine {
-    if (typeof value !== "object" || value === null) return false;
-
-    const line = value as Record<string, unknown>;
-    return (
-        typeof line.menu_id === "string" &&
-        typeof line.quantity === "number" &&
-        Number.isInteger(line.quantity) &&
-        line.quantity >= 1 &&
-        (line.modifiers === undefined ||
-            (Array.isArray(line.modifiers) &&
-                line.modifiers.every((modifier: unknown) => {
-                    if (typeof modifier !== "object" || modifier === null) return false;
-                    const selectedModifier = modifier as Record<string, unknown>;
-                    return (
-                        typeof selectedModifier.modifier_id === "string" &&
-                        typeof selectedModifier.quantity === "number" &&
-                        Number.isInteger(selectedModifier.quantity) &&
-                        selectedModifier.quantity >= 0
-                    );
-                })))
-    );
 }
 
 function withoutZeroModifiers(line: StoredOrderLine): StoredOrderLine {
@@ -60,6 +29,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     const kitchenOrdersFetcher = useFetcher<typeof kitchenOrdersClientLoader>();
     const [isPrcOrderPanelOpen, setIsPrcOrderPanelOpen] = useState(false)
     const [order, setOrder] = useState<StoredOrderLine[]>([])
+    const [cartUuid, setCartUuid] = useState("")
     const [menusById, setMenusById] = useState<Record<string, MenuItem>>({})
     const [isCartLoaded, setIsCartLoaded] = useState(false)
     const [cartError, setCartError] = useState<string | null>(null)
@@ -86,11 +56,11 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         try {
             const storedCart = window.localStorage.getItem(CART_STORAGE_KEY);
             if (storedCart) {
-                const parsedCart: unknown = JSON.parse(storedCart);
-                if (!Array.isArray(parsedCart) || !parsedCart.every(isStoredOrderLine)) {
-                    throw new Error("Saved order data has an invalid format.");
-                }
-                setOrder(parsedCart.map(withoutZeroModifiers));
+                const parsedCart = parseStoredOrderCart(JSON.parse(storedCart));
+                setCartUuid(parsedCart.cart_uuid);
+                setOrder(parsedCart.items.map(withoutZeroModifiers));
+            } else {
+                setCartUuid(createCartUuid());
             }
         } catch (error) {
             console.error("Unable to load the saved order cart.", error);
@@ -101,15 +71,18 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     }, [])
 
     useEffect(() => {
-        if (!isCartLoaded || cartError) return;
+        if (!isCartLoaded || cartError || !cartUuid) return;
 
         try {
-            window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(order));
+            window.localStorage.setItem(
+                CART_STORAGE_KEY,
+                JSON.stringify({ cart_uuid: cartUuid, items: order })
+            );
         } catch (error) {
             console.error("Unable to save the order cart.", error);
             setCartError("Your latest order changes could not be saved to this device.");
         }
-    }, [order, cartError, isCartLoaded])
+    }, [order, cartUuid, cartError, isCartLoaded])
 
     useEffect(() => {
         const menus = menuCategory?.recipe_categories.flatMap(
@@ -197,10 +170,15 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     }
 
     const clearOrderAfterCheckout = useCallback(() => {
+        const nextCartUuid = createCartUuid();
         setOrder([]);
+        setCartUuid(nextCartUuid);
         setKitchenOrdersRefreshKey((current) => current + 1);
         try {
-            window.localStorage.setItem(CART_STORAGE_KEY, "[]");
+            window.localStorage.setItem(
+                CART_STORAGE_KEY,
+                JSON.stringify({ cart_uuid: nextCartUuid, items: [] })
+            );
         } catch (error) {
             console.error("Checkout succeeded, but the saved order could not be cleared.", error);
             setCartError("Checkout succeeded, but the saved order could not be cleared.");
