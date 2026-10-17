@@ -72,6 +72,8 @@ export function CheckoutReviewDialog({
         if (totalAmount === null) return;
         if (!payLater && paymentMethod === "cash" && totalAmount !== null && cashReceivedAmount < totalAmount) return;
 
+        
+
         onProcessPayment(paymentMethod, orderType === "dine-in" ? "dine_in" : "take_out", payLater);
     }
 

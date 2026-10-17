@@ -142,7 +142,7 @@ export default function CashlessWindow({ amount } : ComponentProps){
                     <p className="text-[10px] font-light">Screen will automatically update or perform manually check.</p>
 
                     <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
-                        <ButtonPrint mode="print_qr" text="Print Receipt" isDisabled={isLoading} qr_object={qrCodeUrl} />
+                        <ButtonPrint mode="print_qr" text="Print QR" isDisabled={isLoading} qr_object={qrCodeUrl} />
                         <Button disabled={isLoading} className="bg-green-900 text-white hover:bg-green-700">
                             {isLoading ? <><Spinner /> Generating QR</> : <><RotateCcw /> Manual Check</>}
                         </Button>
