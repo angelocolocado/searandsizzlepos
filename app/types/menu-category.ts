@@ -46,6 +46,7 @@ export type CheckoutPrepareResponse = {
 
 export type CheckoutSuccessResponse = {
     status: "success";
+    order_number: number;
     totalAmount: number;
     payment_method: "cash" | "cashless";
     payment: {

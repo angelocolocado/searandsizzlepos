@@ -291,6 +291,7 @@ export function ProccessOrderPanel({
                     const printer = orderPrinterRef.current;
                     if (!printer) throw new Error("Order printer is unavailable.");
                     await printer.handleOrderPrint({
+                        orderNumber: checkout.order_number,
                         items: pendingCheckout.items,
                         totalAmount: checkout.totalAmount,
                         orderType: pendingCheckout.orderType,

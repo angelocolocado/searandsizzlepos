@@ -66,6 +66,9 @@ function isCheckoutSuccessResponse(value: unknown): value is CheckoutSuccessResp
     const payment = response.payment as Record<string, unknown>;
     return (
         response.status === "success" &&
+        typeof response.order_number === "number" &&
+        Number.isInteger(response.order_number) &&
+        response.order_number >= 1 &&
         typeof response.totalAmount === "number" &&
         Number.isFinite(response.totalAmount) &&
         response.totalAmount >= 0 &&
