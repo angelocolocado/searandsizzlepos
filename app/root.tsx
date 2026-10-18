@@ -14,6 +14,8 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { useEffect } from "react";
 import { Skeleton } from "./components/ui/skeleton";
+import { UserProvider } from "./context/UserContext";
+import api from "./lib/axios";
 
 
 export const links: Route.LinksFunction = () => [
@@ -47,6 +49,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+export async function clientLoader(){
+  try{
+    const response = await api.get("user")
+    return response.data
+  } catch(err) {
+    return {}
+  }
+}
+
+
 export function HydrateFallback() {
   useEffect(() => {
     NProgress.start();
@@ -66,7 +78,7 @@ export function HydrateFallback() {
   );
 }
 
-export default function App() {
+export default function App({ loaderData } : Route.ComponentProps) {
 
   const navigation = useNavigation();
 
@@ -78,7 +90,11 @@ export default function App() {
     }
   }, [navigation.state]);
 
-  return <Outlet />;
+  return <>
+    <UserProvider initialUser={loaderData}>
+      <Outlet />
+    </UserProvider>
+  </>;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
