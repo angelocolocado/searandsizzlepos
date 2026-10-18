@@ -364,6 +364,7 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         TEXT_SIZE_NORMAL,
         new Uint8Array([0x1b, 0x61, 0x01]),
         PAPER_FEED,
+        new Uint8Array([0x1b, 0x42, 0x01, 0x0a]), // BEEP ESC B (1 beep, ~0.5 sec)
       ]);
 
       await writeInChunks(characteristic, payload, 100);
