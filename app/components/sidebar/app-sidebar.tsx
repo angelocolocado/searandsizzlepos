@@ -14,6 +14,7 @@ import { useFetcher } from "react-router"
 import { useEffect, useState } from "react"
 import { NavUser } from "./user"
 import { useUser } from "~/context/UserContext"
+import type { clientLoader as sidebarClientLoader } from "~/routes/sidebar-route"
 
 import {
   Dialog,
@@ -36,20 +37,42 @@ export type SidebarData = {
 export function AppSidebar() {
 
   const [isSignOutOpen, setIsSignOutOpen] = useState(false)
-  const fetcher = useFetcher<{ success: boolean; message?: string }>()
-  const isSigningOut = fetcher.state !== "idle"
+  const logoutFetcher = useFetcher<{ success: boolean; message?: string }>()
+  const sidebarFetcher = useFetcher<typeof sidebarClientLoader>()
+  const isSigningOut = logoutFetcher.state !== "idle"
   const [sidebarData, setSidebarData] = useState<SidebarData[]>([]);
   const { user } = useUser()
 
   const displayName = user?.name?.trim() || user?.username || "Administrator"
 
+  useEffect(() => {
+    sidebarFetcher.load("/sidebar")
+  }, [sidebarFetcher.load])
+
+  useEffect(() => {
+    if (sidebarFetcher.state !== "idle" || !sidebarFetcher.data) return
+
+    if (!Array.isArray(sidebarFetcher.data)) {
+      console.error("Sidebar route returned invalid navigation data.")
+      return
+    }
+
+    setSidebarData(
+      sidebarFetcher.data.filter((item): item is SidebarData =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.category === "string" &&
+        typeof item.id === "number"
+      )
+    )
+  }, [sidebarFetcher.data, sidebarFetcher.state])
 
   useEffect(() => {
 
-    if (fetcher.state === "idle" && fetcher.data?.success) {
+    if (logoutFetcher.state === "idle" && logoutFetcher.data?.success) {
       window.location.href = "/login"
     }
-  }, [fetcher.data, fetcher.state])
+  }, [logoutFetcher.data, logoutFetcher.state])
 
   return (
     <Sidebar collapsible="offcanvas">
@@ -92,21 +115,21 @@ export function AppSidebar() {
               Are you sure you want to sign out of your account?
             </DialogDescription>
           </DialogHeader>
-          {fetcher.data && !fetcher.data.success && (
+          {logoutFetcher.data && !logoutFetcher.data.success && (
             <p role="alert" aria-live="assertive" className="text-sm text-destructive">
-              {fetcher.data.message ?? "Unable to sign out. Please try again."}
+              {logoutFetcher.data.message ?? "Unable to sign out. Please try again."}
             </p>
           )}
           <DialogFooter>
             <DialogClose
               render={<Button type="button" variant="ghost" disabled={isSigningOut}>Cancel</Button>}
             />
-            <fetcher.Form method="post" action="/logout">
+            <logoutFetcher.Form method="post" action="/logout">
               <Button type="submit" variant="destructive" disabled={isSigningOut}>
                 <LogOut aria-hidden="true" />
                 {isSigningOut ? "Signing out..." : "Yes, sign out"}
               </Button>
-            </fetcher.Form>
+            </logoutFetcher.Form>
           </DialogFooter>
         </DialogContent>
       </Dialog>
