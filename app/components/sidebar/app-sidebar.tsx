@@ -7,11 +7,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
 } from "~/components/ui/sidebar"
 import { SidebarNavigations } from "./inventory"
 import { navItems } from "./data"
 import { useFetcher } from "react-router"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { NavUser } from "./user"
 import { useUser } from "~/context/UserContext"
 import type { clientLoader as sidebarClientLoader } from "~/routes/sidebar-route"
@@ -41,30 +42,42 @@ export function AppSidebar() {
   const sidebarFetcher = useFetcher<typeof sidebarClientLoader>()
   const isSigningOut = logoutFetcher.state !== "idle"
   const [sidebarData, setSidebarData] = useState<SidebarData[]>([]);
+  const [isSidebarLoading, setIsSidebarLoading] = useState(true)
+  const sidebarLoadStartedAt = useRef<number | null>(null)
   const { user } = useUser()
 
   const displayName = user?.name?.trim() || user?.username || "Administrator"
 
   useEffect(() => {
+    sidebarLoadStartedAt.current = Date.now()
+    setIsSidebarLoading(true)
     sidebarFetcher.load("/sidebar")
   }, [sidebarFetcher.load])
 
   useEffect(() => {
-    if (sidebarFetcher.state !== "idle" || !sidebarFetcher.data) return
+    if (sidebarFetcher.state !== "idle" || sidebarLoadStartedAt.current === null) return
 
-    if (!Array.isArray(sidebarFetcher.data)) {
+    if (sidebarFetcher.data && !Array.isArray(sidebarFetcher.data)) {
       console.error("Sidebar route returned invalid navigation data.")
-      return
+    } else if (Array.isArray(sidebarFetcher.data)) {
+      setSidebarData(
+        sidebarFetcher.data.filter((item): item is SidebarData =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof item.category === "string" &&
+          typeof item.id === "number"
+        )
+      )
     }
 
-    setSidebarData(
-      sidebarFetcher.data.filter((item): item is SidebarData =>
-        typeof item === "object" &&
-        item !== null &&
-        typeof item.category === "string" &&
-        typeof item.id === "number"
-      )
-    )
+    const elapsed = Date.now() - sidebarLoadStartedAt.current
+    const remaining = Math.max(0, 600 - elapsed)
+    const timeout = window.setTimeout(() => {
+      setIsSidebarLoading(false)
+      sidebarLoadStartedAt.current = null
+    }, remaining)
+
+    return () => window.clearTimeout(timeout)
   }, [sidebarFetcher.data, sidebarFetcher.state])
 
   useEffect(() => {
@@ -93,10 +106,17 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-
-
-        {sidebarData.length > 0 && <SidebarNavigations title="Menu" nav_items={sidebarData}  />}
-
+        {isSidebarLoading ? (
+          <SidebarGroup>
+            <SidebarMenu>
+              {Array.from({ length: 10 }, (_, index) => (
+                <SidebarMenuSkeleton key={index} showIcon />
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+        ) : (
+          sidebarData.length > 0 && <SidebarNavigations title="Menu" nav_items={sidebarData} />
+        )}
       </SidebarContent>
       <SidebarFooter>
         {user ? (
