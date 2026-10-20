@@ -73,7 +73,10 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     } catch (error) {
         console.error("Failed to fetch cart menu details from the backend.", error);
         return data(
-            { error: "Could not load menu details from the backend. Please try again." },
+            {
+                error:
+                    "Some items are currently unavailable. Your cart has been reset. Please review your order and try again.",
+            },
             { status: 502 }
         );
     }

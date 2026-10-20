@@ -189,6 +189,22 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         }
     }, [])
 
+    const resetCartAfterMenuLoadFailure = useCallback(() => {
+        const nextCartUuid = createCartUuid();
+        setOrder([]);
+        setCartUuid(nextCartUuid);
+
+        try {
+            window.localStorage.setItem(
+                CART_STORAGE_KEY,
+                JSON.stringify({ cart_uuid: nextCartUuid, items: [] })
+            );
+        } catch (error) {
+            console.error("The cart was reset, but the empty cart could not be saved.", error);
+            setCartError("The cart was reset, but it could not be saved to this device.");
+        }
+    }, [])
+
     const handleReprintOrder = useCallback(async (orderToReprint: KitchenOrder) => {
         try {
             const printer = orderPrinterRef.current;
@@ -270,6 +286,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     cart={cart}
                     cartError={cartError}
                     onMenusLoaded={handleMenusLoaded}
+                    onCartReset={resetCartAfterMenuLoadFailure}
                     onQuantityChange={updateQuantity}
                     onModifierQuantityChange={updateModifierQuantity}
                     onRemoveMenu={removeMenu}

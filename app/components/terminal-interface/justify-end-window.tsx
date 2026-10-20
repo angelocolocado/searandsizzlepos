@@ -85,6 +85,7 @@ type ComponentProps = {
     cart: OrderLine[]
     cartError: string | null
     onMenusLoaded: (menus: MenuItem[]) => void
+    onCartReset: () => void
     onQuantityChange: (menuId: string, quantity: number) => void
     onModifierQuantityChange: (menuId: string, modifierId: string, quantity: number) => void
     onRemoveMenu: (menuId: string) => void
@@ -118,6 +119,7 @@ export function ProccessOrderPanel({
     cart,
     cartError,
     onMenusLoaded,
+    onCartReset,
     onQuantityChange,
     onModifierQuantityChange,
     onRemoveMenu,
@@ -415,6 +417,7 @@ export function ProccessOrderPanel({
         if (!fetcher.data) return;
 
         if ("error" in fetcher.data && typeof fetcher.data.error === "string") {
+            onCartReset();
             toast.error(fetcher.data.error);
             return;
         }
@@ -429,7 +432,7 @@ export function ProccessOrderPanel({
         }
 
         toast.error("The backend returned invalid menu details.");
-    }, [fetcher.data, onMenusLoaded])
+    }, [fetcher.data, onMenusLoaded, onCartReset])
 
     useEffect(() => {
         try {

@@ -121,7 +121,7 @@ export function AppSidebar() {
       <SidebarFooter>
         {user ? (
           <NavUser
-            user={{ name: displayName, email: user.email }}
+            user={{ name: displayName, email: user.email, type: user.type }}
             onSignOut={() => setIsSignOutOpen(true)}
           />
         ) : null}

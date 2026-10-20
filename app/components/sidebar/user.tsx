@@ -3,6 +3,7 @@
 import {
   BadgeCheck,
   ChevronsUpDown,
+  Columns3Cog,
   LogOut,
   User,
 } from "lucide-react"
@@ -28,6 +29,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "~/components/ui/sidebar"
+import { useUser } from "~/context/UserContext"
 
 export function NavUser({
   user,
@@ -37,6 +39,7 @@ export function NavUser({
     name: string
     email: string
     avatar?: string
+    type: number
   }
   onSignOut: () => void
 }) {
@@ -88,12 +91,14 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem render={<NavLink to="/my-profile" />}>
-                <User />
-                Profile
-              </DropdownMenuItem>
+              {(user.type == 1 || user.type == 2) && <>
+                <DropdownMenuItem render={<NavLink to={import.meta.env.VITE_OPERATIONS_URL} />}>
+                  <Columns3Cog />
+                  Operations Panel
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>}
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onSignOut} variant="destructive">
               <LogOut />
               Sign out
