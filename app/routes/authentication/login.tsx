@@ -56,8 +56,9 @@ export default function Login({ actionData, loaderData } : Route.ComponentProps)
 
     return (<>
       <main className="relative animate-in fade-in duration-500 ease-out scroll-smooth w-full h-screen flex items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center">
+        <div hidden className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center">
           <LightPillar
+            
             topColor="#ff2727"
             bottomColor="#eab308"
             intensity={1}
