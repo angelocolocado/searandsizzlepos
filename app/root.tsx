@@ -61,9 +61,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export async function clientLoader(){
   try{
     const response = await api.get("user")
-    return response.data
+    return response.data ?? null
   } catch(err) {
-    return {}
+    return null
   }
 }
 

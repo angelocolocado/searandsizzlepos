@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 export interface User {
     id: number
@@ -17,6 +17,10 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children, initialUser } : { children: ReactNode, initialUser: User | null }){
     const [user, setUser] = useState<User | null>(initialUser)
+
+    useEffect(() => {
+        setUser(initialUser)
+    }, [initialUser])
     
     return (
         <UserContext.Provider value={{user, setUser}}>

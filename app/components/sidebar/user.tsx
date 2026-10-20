@@ -29,7 +29,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "~/components/ui/sidebar"
-import { useUser } from "~/context/UserContext"
 
 export function NavUser({
   user,
