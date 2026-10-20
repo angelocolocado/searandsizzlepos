@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "clcd.searensizzle.pos",
+        "sha256_cert_fingerprints": ["09:68:0A:88:F5:CE:8F:0B:89:AE:38:9F:BA:79:DF:93:8E:94:11:8B:B7:35:6A:2D:3B:9B:A1:11:CE:69:6A:9F"]
+      }
+    }]
