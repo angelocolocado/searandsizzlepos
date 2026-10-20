@@ -1,7 +1,6 @@
 import { SidebarProvider, SidebarTrigger } from "~/components/ui/sidebar"
 import { AppSidebar } from "~/components/sidebar/app-sidebar"
 import { NavLink, Outlet, useLocation } from "react-router"
-import { Toaster } from "~/components/ui/sonner"
 import { Skeleton } from "~/components/ui/skeleton"
 import { Spinner } from "~/components/ui/spinner"
 import React from "react"
@@ -19,7 +18,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <main className="min-w-0 flex-1 max-w-[1600px] w-full mx-auto">
         <div className="flex-1 overflow-hidden">
           <Outlet />
-          <Toaster theme="dark" richColors position="top-right" />
         </div>
       </main>
     </SidebarProvider>

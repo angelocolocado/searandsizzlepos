@@ -14,12 +14,14 @@ import type { Route } from "./+types/root";
 import "./app.css";
 import { useEffect } from "react";
 import { Skeleton } from "./components/ui/skeleton";
+import { Toaster } from "./components/ui/sonner";
 import { UserProvider } from "./context/UserContext";
 import api from "./lib/axios";
+import PwaStatus from "./components/pwa-status";
 
 
 export const links: Route.LinksFunction = () => [
-  { rel: "manifest", href: "/manifest.json" },
+  { rel: "manifest", href: "/manifest.webmanifest" },
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
   {
     rel: "preconnect",
@@ -38,11 +40,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="theme-color" content="#000000" />
         <Meta />
         <Links />
       </head>
       <body>
         {children}
+        <PwaStatus />
+        <Toaster theme="dark" richColors position="top-right" />
         <ScrollRestoration />
         <Scripts />
       </body>
