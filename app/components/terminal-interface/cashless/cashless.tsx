@@ -16,6 +16,7 @@ export default function CashlessWindow({ amount } : ComponentProps){
 
     const [qrCodeUrl, setQrCodeUrl] = useState(null);
     const [intentId, setIntentId] = useState(null);
+    const [testLink, setTestLink] = useState(null);
     const [isPaid, setIsPaid] = useState(false);
     const [isFailed, setIsFailed] = useState(false);
     
@@ -30,6 +31,7 @@ export default function CashlessWindow({ amount } : ComponentProps){
         setIsFailed(false)
         setIntentId(fetcher.data.data.payment_intent_id)
         setQrCodeUrl(fetcher.data.data.qr_code_url)
+        setTestLink(fetcher.data.data.next_action)
 
     }, [fetcher.data])
 
@@ -139,6 +141,7 @@ export default function CashlessWindow({ amount } : ComponentProps){
                 <div className="w-full flex flex-col items-center">
                     <h3>Scan using GCash, Maya, or any Bank App</h3>
                     <img src={qrCodeUrl} alt="QR Ph Code" style={{ width: '250px', height: '250px' }} />
+                    {testLink && <p>TEST MODE: <a href={testLink} target="_blank">Authorize Payment</a></p>}
                     <p className="text-[10px] font-light">Screen will automatically update or perform manually check.</p>
 
                     <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
