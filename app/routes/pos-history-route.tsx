@@ -123,9 +123,16 @@ export default function PosHistoryRoute({ loaderData }: Route.ComponentProps) {
                 </section>
 
                 <Card>
-                    <CardHeader>
-                        <CardTitle>Orders</CardTitle>
-                        <CardDescription>Orders created today by your cashier account.</CardDescription>
+                    <CardHeader className="border-b bg-card/80">
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <CardTitle>Orders</CardTitle>
+                                <CardDescription className="mt-1">Orders created today by your cashier account.</CardDescription>
+                            </div>
+                            <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                                {orders.length} {orders.length === 1 ? "order" : "orders"}
+                            </span>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0">
                         {orders.length === 0 ? (
@@ -134,49 +141,75 @@ export default function PosHistoryRoute({ loaderData }: Route.ComponentProps) {
                             </p>
                         ) : (
                             <div className="overflow-x-auto">
-                                <table className="w-full min-w-[800px] text-sm">
-                                    <thead className="border-y bg-muted/40 text-left text-xs text-muted-foreground">
+                                <table className="w-full min-w-[900px] border-collapse text-sm">
+                                    <thead className="bg-muted/50 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                                         <tr>
-                                            <th className="px-6 py-3 font-medium">Order</th>
-                                            <th className="px-6 py-3 font-medium">Items</th>
-                                            <th className="px-6 py-3 font-medium">Type</th>
-                                            <th className="px-6 py-3 font-medium">Payment</th>
-                                            <th className="px-6 py-3 font-medium">Status</th>
-                                            <th className="px-6 py-3 text-right font-medium">Total</th>
+                                            <th className="w-36 px-6 py-3.5 font-semibold">Order</th>
+                                            <th className="w-[30%] px-6 py-3.5 font-semibold">Items</th>
+                                            <th className="w-28 px-6 py-3.5 font-semibold">Type</th>
+                                            <th className="w-40 px-6 py-3.5 font-semibold">Payment</th>
+                                            <th className="w-48 px-6 py-3.5 font-semibold">Status</th>
+                                            <th className="w-32 px-6 py-3.5 text-right font-semibold">Total</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y">
+                                    <tbody className="divide-y divide-border/60">
                                         {orders.map((order) => (
-                                            <tr key={order.id} className="align-top">
-                                                <td className="px-6 py-4">
-                                                    <p className="font-semibold">#{order.order_number}</p>
-                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                            <tr key={order.id} className="group align-top transition-colors hover:bg-muted/30">
+                                                <td className="px-6 py-5">
+                                                    <p className="font-semibold tracking-tight">#{order.order_number}</p>
+                                                    <p className="mt-1.5 text-xs text-muted-foreground">
                                                         {new Intl.DateTimeFormat("en-PH", { timeStyle: "short" }).format(new Date(order.created_at))}
                                                     </p>
                                                 </td>
-                                                <td className="max-w-xs px-6 py-4">
-                                                    {order.order_items.map((item) => (
-                                                        <p key={`${order.id}-${item.name}`} className="truncate">
-                                                            {item.quantity}× {item.name}
-                                                        </p>
-                                                    ))}
+                                                <td className="max-w-xs px-6 py-5">
+                                                    <div className="space-y-1">
+                                                        {order.order_items.slice(0, 3).map((item) => (
+                                                            <p key={`${order.id}-${item.name}`} className="truncate font-medium">
+                                                                <span className="mr-1.5 text-muted-foreground">{item.quantity}×</span>
+                                                                {item.name}
+                                                            </p>
+                                                        ))}
+                                                        {order.order_items.length > 3 && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                +{order.order_items.length - 3} more item{order.order_items.length - 3 === 1 ? "" : "s"}
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">{formatOrderType(order.order_type)}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap capitalize">
-                                                    {order.payment_method ?? "—"} · {(order.payment_status ?? "unknown").replace("_", " ")}
+                                                <td className="px-6 py-5 whitespace-nowrap text-muted-foreground">
+                                                    {formatOrderType(order.order_type)}
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={order.status === "void" ? "font-semibold text-destructive" : "capitalize"}>
+                                                <td className="px-6 py-5 whitespace-nowrap">
+                                                    <p className="font-medium capitalize">{order.payment_method ?? "—"}</p>
+                                                    <p className="mt-1 text-xs capitalize text-muted-foreground">
+                                                        {(order.payment_status ?? "unknown").replace("_", " ")}
+                                                    </p>
+                                                </td>
+                                                <td className="px-6 py-5">
+                                                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
+                                                        order.status === "void"
+                                                            ? "bg-destructive/10 text-destructive"
+                                                            : order.status === "cooked"
+                                                                ? "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300"
+                                                                : "bg-muted text-muted-foreground"
+                                                    }`}>
                                                         {order.status}
                                                     </span>
                                                     {order.voucher_applied && (
-                                                        <p className="mt-1 text-xs text-green-700">
-                                                            Voucher {order.voucher_code ?? "applied"} · {formatPrice(order.discount_amount)} off
+                                                        <p className="mt-2 text-xs font-medium text-green-700 dark:text-green-400">
+                                                            {order.voucher_code ?? "Voucher"} · {formatPrice(order.discount_amount)} off
                                                         </p>
                                                     )}
                                                 </td>
-                                                <td className="px-6 py-4 text-right font-semibold tabular-nums">
+                                                <td className="px-6 py-5 text-right">
+                                                    <p className="font-bold tabular-nums tracking-tight">
                                                     {formatPrice(order.total_amount)}
+                                                    </p>
+                                                    {order.voucher_applied && (
+                                                        <p className="mt-1 text-xs text-muted-foreground line-through">
+                                                            {formatPrice(order.subtotal_amount)}
+                                                        </p>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
