@@ -6,6 +6,7 @@ import type {
     CheckoutCartLine,
     CheckoutPrepareResponse,
     CheckoutSuccessResponse,
+    VoucherValidationResponse,
 } from "~/types/menu-category";
 import type { StoredOrderCart } from "~/lib/order-cart-storage";
 
@@ -46,6 +47,10 @@ function isCheckoutCart(value: unknown): value is StoredOrderCart {
     );
 }
 
+function isCheckoutItems(value: unknown): value is CheckoutCartLine[] {
+    return Array.isArray(value) && value.length > 0 && value.every(isCheckoutCartLine);
+}
+
 function isCheckoutPrepareResponse(value: unknown): value is CheckoutPrepareResponse {
     if (typeof value !== "object" || value === null) return false;
 
@@ -80,6 +85,23 @@ function isCheckoutSuccessResponse(value: unknown): value is CheckoutSuccessResp
     );
 }
 
+function isVoucherValidationResponse(value: unknown): value is VoucherValidationResponse {
+    if (typeof value !== "object" || value === null) return false;
+
+    const response = value as Record<string, unknown>;
+    return (
+        typeof response.valid === "boolean" &&
+        (response.voucher_code === null || typeof response.voucher_code === "string") &&
+        typeof response.subtotal === "number" &&
+        Number.isFinite(response.subtotal) &&
+        typeof response.discount_amount === "number" &&
+        Number.isFinite(response.discount_amount) &&
+        typeof response.total_amount === "number" &&
+        Number.isFinite(response.total_amount) &&
+        (response.message === null || typeof response.message === "string")
+    );
+}
+
 function getCheckoutErrorMessage(error: unknown, fallback: string) {
     if (!axios.isAxiosError(error)) return fallback;
 
@@ -105,7 +127,11 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
 
     const formData = await request.formData();
     const formIntent = formData.get("intent");
-    if (formIntent !== "handle_recalculate" && formIntent !== "handle_checkout") {
+    if (
+        formIntent !== "handle_recalculate" &&
+        formIntent !== "handle_checkout" &&
+        formIntent !== "handle_validate_voucher"
+    ) {
         return data({ error: "Unsupported checkout action." }, { status: 400 });
     }
 
@@ -115,6 +141,10 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     }
 
     const cartSignature = formData.get("cart_signature");
+    const voucherCode = formData.get("voucher_code");
+    if (voucherCode !== null && typeof voucherCode !== "string") {
+        return data({ error: "Voucher code must be a string." }, { status: 400 });
+    }
     const paymentMethod = formData.get("payment_method");
     const orderType = formData.get("order_type");
     if (
@@ -138,6 +168,39 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
     } catch (error) {
         console.error("Checkout request contained invalid cart JSON.", error);
         return data({ error: "Cart data is not valid JSON." }, { status: 400 });
+    }
+
+    if (formIntent === "handle_validate_voucher") {
+        const submittedItems =
+            typeof submittedCart === "object" &&
+            submittedCart !== null &&
+            Array.isArray((submittedCart as Record<string, unknown>).items)
+                ? (submittedCart as Record<string, unknown>).items
+                : submittedCart;
+
+        if (!isCheckoutItems(submittedItems) || !voucherCode?.trim()) {
+            return data(
+                { error: "A voucher code and valid cart items are required." },
+                { status: 422 }
+            );
+        }
+
+        try {
+            const response = await api.post<VoucherValidationResponse>("v1/checkout/voucher", {
+                voucher_code: voucherCode.trim(),
+                items: submittedItems,
+            });
+            if (!isVoucherValidationResponse(response.data)) {
+                throw new Error("Backend returned an invalid voucher validation response.");
+            }
+            return data(response.data);
+        } catch (error) {
+            console.error("Failed to validate the checkout voucher.", error);
+            return data(
+                { error: getCheckoutErrorMessage(error, "Could not validate the voucher. Please try again.") },
+                { status: 502 }
+            );
+        }
     }
 
     if (!isCheckoutCart(submittedCart)) {
@@ -170,6 +233,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
                     payment_method: paymentMethod,
                     cart_uuid: cart.cart_uuid,
                     items: cart.items,
+                    ...(voucherCode?.trim() ? { voucher_code: voucherCode.trim() } : {}),
                 }
             );
 
@@ -196,6 +260,7 @@ export async function clientAction({ request }: Route.ClientActionArgs) {
             intent: "prepare",
             cart_uuid: cart.cart_uuid,
             items: cart.items,
+            ...(voucherCode?.trim() ? { voucher_code: voucherCode.trim() } : {}),
         });
 
         if (!isCheckoutPrepareResponse(response.data)) {

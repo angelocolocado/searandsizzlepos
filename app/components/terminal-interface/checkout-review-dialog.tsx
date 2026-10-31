@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Banknote, Check, CreditCard } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
@@ -10,6 +10,9 @@ import {
 } from "~/components/ui/dialog";
 import type { OrderLine } from "~/types/menu-category";
 import CashlessWindow from "./cashless/cashless";
+import { useFetcher } from "react-router";
+import type { clientAction as checkoutClientAction } from "~/routes/checkout/checkout-route";
+import type { VoucherValidationResponse } from "~/types/menu-category";
 
 type OrderType = "dine-in" | "takeout";
 type PaymentMethod = "cash" | "cashless";
@@ -25,7 +28,8 @@ type ComponentProps = {
     onProcessPayment: (
         paymentMethod: PaymentMethod,
         orderType: "dine_in" | "take_out",
-        payLater: boolean
+        payLater: boolean,
+        voucherCode: string
     ) => void
 }
 
@@ -43,11 +47,62 @@ export function CheckoutReviewDialog({
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null)
     const [payLater, setPayLater] = useState(false)
     const [cashReceived, setCashReceived] = useState("")
+    const [voucherCode, setVoucherCode] = useState("")
+    const [voucherResult, setVoucherResult] = useState<VoucherValidationResponse | null>(null)
+    const [voucherError, setVoucherError] = useState<string | null>(null)
+    const voucherFetcher = useFetcher<typeof checkoutClientAction>()
+
+    useEffect(() => {
+        const result = voucherFetcher.data
+        if (!result || voucherFetcher.state !== "idle") return
+        if (typeof result === "object" && result !== null && "valid" in result && typeof result.valid === "boolean") {
+            setVoucherResult(result as VoucherValidationResponse)
+            setVoucherError(null)
+        } else if (typeof result === "object" && result !== null && "error" in result && typeof result.error === "string") {
+            setVoucherResult(null)
+            setVoucherError(result.error)
+        }
+    }, [voucherFetcher.data, voucherFetcher.state])
+
+    const applyVoucher = () => {
+        const code = voucherCode.trim()
+        if (!code || voucherFetcher.state !== "idle") return
+        setVoucherError(null)
+        voucherFetcher.submit(
+            {
+                intent: "handle_validate_voucher",
+                voucher_code: code,
+                cart: JSON.stringify({
+                    items: cart.map((line) => ({
+                        menu_id: line.menuId,
+                        quantity: line.quantity,
+                        modifiers: line.modifiers
+                            .filter((modifier) => modifier.quantity > 0)
+                            .map((modifier) => ({
+                                modifier_id: modifier.modifierId,
+                                quantity: modifier.quantity,
+                            })),
+                    })),
+                }),
+            },
+            { method: "POST", action: "/checkout" }
+        )
+    }
+
+    const clearVoucher = () => {
+        setVoucherCode("")
+        setVoucherResult(null)
+        setVoucherError(null)
+    }
+
+    const effectiveTotalAmount = voucherResult?.valid
+        ? voucherResult.total_amount
+        : totalAmount
 
     const cashReceivedAmount = Number(cashReceived || 0)
-    const changeDue = totalAmount === null
+    const changeDue = effectiveTotalAmount === null
         ? 0
-        : Math.max(0, cashReceivedAmount - totalAmount)
+        : Math.max(0, cashReceivedAmount - effectiveTotalAmount)
 
     const appendCashDigit = (digit: string) => {
         setCashReceived((current) => {
@@ -69,12 +124,11 @@ export function CheckoutReviewDialog({
 
     const processPayment = () => {
         if (paymentMethod === null) return;
-        if (totalAmount === null) return;
-        if (!payLater && paymentMethod === "cash" && totalAmount !== null && cashReceivedAmount < totalAmount) return;
+        if (effectiveTotalAmount === null) return;
+        if (voucherCode.trim() && !voucherResult?.valid) return;
+        if (!payLater && paymentMethod === "cash" && cashReceivedAmount < effectiveTotalAmount) return;
 
-        
-
-        onProcessPayment(paymentMethod, orderType === "dine-in" ? "dine_in" : "take_out", payLater);
+        onProcessPayment(paymentMethod, orderType === "dine-in" ? "dine_in" : "take_out", payLater, voucherCode.trim());
     }
 
     return (
@@ -130,7 +184,7 @@ export function CheckoutReviewDialog({
                         <div className="mt-4 flex items-center justify-between gap-2 rounded-xl bg-green-50 px-4 py-3 dark:bg-green-950/30">
                             <span className="text-sm font-medium">Total due</span>
                             <span className="text-lg font-bold tabular-nums text-green-700 dark:text-green-400 sm:text-xl">
-                                {totalAmount === null ? "—" : formatPrice(totalAmount)}
+                                {effectiveTotalAmount === null ? "—" : formatPrice(effectiveTotalAmount)}
                             </span>
                         </div>
                     </section>
@@ -144,6 +198,43 @@ export function CheckoutReviewDialog({
                                 Choose dine-in or takeout, then select how you’ll pay.
                             </DialogDescription>
                         </DialogHeader>
+
+                        <div className="mb-5 rounded-xl border p-3.5 sm:p-4">
+                            <label htmlFor="checkout-voucher" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Voucher code
+                            </label>
+                            <div className="mt-2 flex gap-2">
+                                <input
+                                    id="checkout-voucher"
+                                    value={voucherCode}
+                                    onChange={(event) => {
+                                        setVoucherCode(event.currentTarget.value.toUpperCase())
+                                        setVoucherResult(null)
+                                    }}
+                                    placeholder="Enter voucher code"
+                                    className="h-10 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm uppercase outline-none focus:ring-2 focus:ring-green-600"
+                                    disabled={voucherFetcher.state !== "idle"}
+                                />
+                                <Button type="button" variant="outline" onClick={applyVoucher} disabled={!voucherCode.trim() || voucherFetcher.state !== "idle"}>
+                                    {voucherFetcher.state !== "idle" ? "Checking..." : "Apply"}
+                                </Button>
+                                {voucherCode && (
+                                    <Button type="button" variant="ghost" onClick={clearVoucher} disabled={voucherFetcher.state !== "idle"}>
+                                        Clear
+                                    </Button>
+                                )}
+                            </div>
+                            {voucherResult && (
+                                <p className={`mt-2 text-xs ${voucherResult.valid ? "text-green-700" : "text-destructive"}`} role="status">
+                                    {voucherResult.valid
+                                        ? `${voucherResult.voucher_code} applied: ${formatPrice(voucherResult.discount_amount)} off`
+                                        : voucherResult.message || "This voucher cannot be applied."}
+                                </p>
+                            )}
+                            {voucherError && (
+                                <p className="mt-2 text-xs text-destructive" role="alert">{voucherError}</p>
+                            )}
+                        </div>
 
                         <div>
                             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -222,7 +313,7 @@ export function CheckoutReviewDialog({
                             <div className="mt-3 flex items-center justify-between gap-3">
                                 <span className="text-sm text-muted-foreground">Amount due</span>
                                 <span className="text-lg font-bold tabular-nums">
-                                    {totalAmount === null ? "—" : formatPrice(totalAmount)}
+                                    {effectiveTotalAmount === null ? "—" : formatPrice(effectiveTotalAmount)}
                                 </span>
                             </div>
                             {paymentMethod === "cash" && !payLater && (
@@ -247,7 +338,7 @@ export function CheckoutReviewDialog({
                         </section>
                     }
 
-                    {paymentMethod === "cash" && !payLater && totalAmount !== null && (
+                    {paymentMethod === "cash" && !payLater && effectiveTotalAmount !== null && (
                         <section className="flex min-w-0 flex-col border-t bg-muted/20 p-4 sm:p-5 md:col-start-2 lg:col-start-auto lg:border-t-0 lg:border-l lg:p-6">
                             <div className="mb-3">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -288,15 +379,15 @@ export function CheckoutReviewDialog({
                                     </Button>
                                 ))}
                             </div>
-                            {cashReceivedAmount < (totalAmount ?? 0) && (
+                            {cashReceivedAmount < (effectiveTotalAmount ?? 0) && (
                                 <p className="mt-2 text-center text-xs text-muted-foreground">
-                                    Enter at least {totalAmount === null ? "the total" : formatPrice(totalAmount)} to continue.
+                                    Enter at least {effectiveTotalAmount === null ? "the total" : formatPrice(effectiveTotalAmount)} to continue.
                                 </p>
                             )}
                         </section>
                     )}
 
-                    {paymentMethod === "cashless" && !payLater && totalAmount !== null ? <CashlessWindow amount={totalAmount} /> : <></>}
+                    {paymentMethod === "cashless" && !payLater && effectiveTotalAmount !== null ? <CashlessWindow amount={effectiveTotalAmount} /> : <></>}
 
                     <div className="col-span-full flex flex-col-reverse gap-2 border-t bg-background p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4 md:px-5 lg:px-6">
                         <Button
@@ -313,9 +404,10 @@ export function CheckoutReviewDialog({
                             className="h-11 bg-green-600 px-6 text-white hover:bg-green-700"
                             disabled={
                                 isSubmitting ||
-                                totalAmount === null ||
+                                effectiveTotalAmount === null ||
                                 paymentMethod === null ||
-                                (!payLater && paymentMethod === "cash" && totalAmount !== null && cashReceivedAmount < totalAmount)
+                                (voucherCode.trim() !== "" && !voucherResult?.valid) ||
+                                (!payLater && paymentMethod === "cash" && effectiveTotalAmount !== null && cashReceivedAmount < effectiveTotalAmount)
                             }
                             onClick={processPayment}
                         >

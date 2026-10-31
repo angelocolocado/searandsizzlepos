@@ -42,17 +42,34 @@ export type CheckoutCartLine = {
 
 export type CheckoutPrepareResponse = {
     totalAmount: number;
+    subtotal?: number;
+    discount_amount?: number;
+    voucher_code?: string;
+    voucher_valid?: boolean;
+    voucher_message?: string | null;
 };
 
 export type CheckoutSuccessResponse = {
     status: "success";
     order_number: number;
+    subtotal?: number;
+    discount_amount?: number;
+    voucher_code?: string;
     totalAmount: number;
     payment_method: "cash" | "cashless";
     payment: {
         status: "accepted";
         amount: number;
     };
+};
+
+export type VoucherValidationResponse = {
+    valid: boolean;
+    voucher_code: string | null;
+    subtotal: number;
+    discount_amount: number;
+    total_amount: number;
+    message: string | null;
 };
 
 export type KitchenOrder = {

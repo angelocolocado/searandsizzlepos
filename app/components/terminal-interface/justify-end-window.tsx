@@ -20,7 +20,7 @@ import { SlideToConfirm } from "~/components/lightswind/slide-to-confirm";
 import type { OrderLine } from "~/types/menu-category";
 import { toast } from "sonner";
 import { useFetcher } from "react-router";
-import type { CheckoutCartLine, MenuItem } from "~/types/menu-category";
+import type { CheckoutCartLine, CheckoutSuccessResponse, MenuItem } from "~/types/menu-category";
 import type { clientAction } from "~/routes/cart/fetch-cartdata-route";
 import type { clientAction as checkoutClientAction } from "~/routes/checkout/checkout-route";
 import { CheckoutReviewDialog } from "./checkout-review-dialog";
@@ -111,6 +111,7 @@ type PendingCheckout = (
         paymentMethod: "cash" | "cashless"
         orderType: "dine_in" | "take_out"
         payLater: boolean
+        voucherCode: string
     }
 ) & CheckoutToast
 
@@ -248,6 +249,12 @@ export function ProccessOrderPanel({
         const pendingCheckout = checkoutToastRef.current;
         if (!result || !pendingCheckout || checkoutFetcher.state !== "idle") return;
 
+        if (typeof result !== "object" || result === null) {
+            checkoutToastRef.current = null;
+            pendingCheckout.reject(new Error("The checkout service returned an invalid response."));
+            return;
+        }
+
         if ("error" in result && typeof result.error === "string") {
             checkoutToastRef.current = null;
             pendingCheckout.reject(new Error(result.error));
@@ -281,10 +288,12 @@ export function ProccessOrderPanel({
             "checkoutComplete" in result &&
             result.checkoutComplete &&
             "checkout" in result &&
+            typeof result.checkout === "object" &&
+            result.checkout !== null &&
             "payLater" in result &&
             typeof result.payLater === "boolean"
         ) {
-            const checkout = result.checkout;
+            const checkout = result.checkout as CheckoutSuccessResponse;
             checkoutToastRef.current = null;
             setIsPrintingOrder(true);
             void (async () => {
@@ -331,7 +340,8 @@ export function ProccessOrderPanel({
     const handleCheckoutPayment = (
         paymentMethod: "cash" | "cashless",
         orderType: "dine_in" | "take_out" = "dine_in",
-        payLater = false
+        payLater = false,
+        voucherCode = ""
     ) => {
         if (checkoutFetcher.state !== "idle" || isPrintingOrder) return;
 
@@ -377,6 +387,7 @@ export function ProccessOrderPanel({
                     paymentMethod,
                     orderType,
                     payLater,
+                    voucherCode,
                     resolve,
                     reject,
                 };
@@ -396,6 +407,7 @@ export function ProccessOrderPanel({
                     payment_method: paymentMethod,
                     order_type: orderType,
                     pay_later: String(payLater),
+                    ...(voucherCode ? { voucher_code: voucherCode } : {}),
                     cart: JSON.stringify(cartData),
                 },
                 { method: "POST", action: "/checkout" }
