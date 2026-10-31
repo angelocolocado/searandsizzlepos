@@ -18,6 +18,7 @@ import { Toaster } from "./components/ui/sonner";
 import { UserProvider } from "./context/UserContext";
 import api from "./lib/axios";
 import PwaStatus from "./components/pwa-status";
+import { ThermalPrinterProvider } from "./components/terminal-interface/print-service/thermal-printer";
 
 
 export const links: Route.LinksFunction = () => [
@@ -101,7 +102,9 @@ export default function App({ loaderData } : Route.ComponentProps) {
 
   return <>
     <UserProvider initialUser={loaderData}>
-      <Outlet />
+      <ThermalPrinterProvider>
+        <Outlet />
+      </ThermalPrinterProvider>
     </UserProvider>
   </>;
 }

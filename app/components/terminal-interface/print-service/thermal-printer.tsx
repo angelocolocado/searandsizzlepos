@@ -1,5 +1,5 @@
 import { Printer } from 'lucide-react';
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
+import React, { createContext, forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import { Spinner } from '~/components/ui/spinner';
 
@@ -35,6 +35,150 @@ type WritableCharacteristic = {
   writeValue: (value: BufferSource) => Promise<void>;
 };
 
+type BluetoothDeviceLike = {
+  name?: string;
+  gatt?: {
+    connect: () => Promise<{
+      getPrimaryServices: () => Promise<Array<{
+        getCharacteristics: () => Promise<Array<WritableCharacteristic>>;
+      }>>;
+    }>;
+  };
+  addEventListener: (type: 'gattserverdisconnected', listener: () => void) => void;
+  removeEventListener: (type: 'gattserverdisconnected', listener: () => void) => void;
+};
+
+type BluetoothNavigator = Navigator & {
+  bluetooth: {
+    requestDevice: (options: {
+      acceptAllDevices: boolean;
+      optionalServices: string[];
+    }) => Promise<BluetoothDeviceLike>;
+  };
+};
+
+type PrinterStatus = 'Disconnected' | 'Searching for printer...' | 'Connecting to GATT Server...' | string;
+
+  type ThermalPrinterContextValue = {
+    device: BluetoothDeviceLike | null;
+    characteristic: WritableCharacteristic | null;
+    status: PrinterStatus;
+    loading: boolean;
+    connectPrinter: () => Promise<void>;
+    setPrinterStatus: (status: string) => void;
+    writePayload: (data: Uint8Array) => Promise<void>;
+  };
+
+  const ThermalPrinterContext = createContext<ThermalPrinterContextValue | null>(null);
+
+  export function useThermalPrinter() {
+    const context = useContext(ThermalPrinterContext);
+    if (!context) {
+      throw new Error('useThermalPrinter must be used within ThermalPrinterProvider.');
+    }
+    return context;
+  }
+
+  export function ThermalPrinterProvider({ children }: { children: React.ReactNode }) {
+    const [device, setDevice] = useState<BluetoothDeviceLike | null>(null);
+    const [characteristic, setCharacteristic] = useState<WritableCharacteristic | null>(null);
+    const [status, setStatus] = useState<PrinterStatus>('Disconnected');
+    const [loading, setLoading] = useState(false);
+    const deviceRef = useRef<BluetoothDeviceLike | null>(null);
+    const characteristicRef = useRef<WritableCharacteristic | null>(null);
+    const writeQueueRef = useRef(Promise.resolve());
+
+    const clearConnection = useCallback((message = 'Disconnected') => {
+      deviceRef.current = null;
+      characteristicRef.current = null;
+      setDevice(null);
+      setCharacteristic(null);
+      setStatus(message);
+    }, []);
+
+    useEffect(() => {
+      const connectedDevice = deviceRef.current;
+      if (!connectedDevice) return;
+
+      const handleDisconnect = () => clearConnection('Printer disconnected.');
+      connectedDevice.addEventListener('gattserverdisconnected', handleDisconnect);
+      return () => connectedDevice.removeEventListener('gattserverdisconnected', handleDisconnect);
+    }, [device, clearConnection]);
+
+    const connectPrinter = useCallback(async () => {
+      if (loading) return;
+
+      try {
+        setLoading(true);
+        setStatus('Searching for printer...');
+
+        const selectedDevice = await (navigator as BluetoothNavigator).bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            '000018f0-0000-1000-8000-00805f9b34fb',
+            '0000ff00-0000-1000-8000-00805f9b34fb',
+            '0000e701-0000-1000-8000-00805f9b34fb',
+          ],
+        });
+
+        setStatus('Connecting to GATT Server...');
+        const server = await selectedDevice.gatt?.connect();
+        if (!server) throw new Error('The selected printer does not support Bluetooth GATT.');
+
+        const services = await server.getPrimaryServices();
+        let targetCharacteristic: WritableCharacteristic | null = null;
+        for (const service of services) {
+          const characteristics = await service.getCharacteristics();
+          const writable = characteristics.find((item) => item.properties.write || item.properties.writeWithoutResponse);
+          if (writable) {
+            targetCharacteristic = writable;
+            break;
+          }
+        }
+
+        if (!targetCharacteristic) throw new Error('No writable characteristic found on this printer.');
+
+        deviceRef.current = selectedDevice;
+        characteristicRef.current = targetCharacteristic;
+        setDevice(selectedDevice);
+        setCharacteristic(targetCharacteristic);
+        setStatus(`Connected to ${selectedDevice.name || 'Thermal Printer'}`);
+      } catch (error) {
+        console.error('Bluetooth Connection Error:', error);
+        setStatus(`Connection Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setLoading(false);
+      }
+    }, [loading]);
+
+    const writePayload = useCallback((data: Uint8Array) => {
+      const write = async () => {
+        const currentCharacteristic = characteristicRef.current;
+        if (!currentCharacteristic) throw new Error('Connect the printer first.');
+        await writeInChunks(currentCharacteristic, data, 100);
+      };
+
+      const nextWrite = writeQueueRef.current.then(write, write);
+      writeQueueRef.current = nextWrite.then(() => undefined, () => undefined);
+      return nextWrite;
+    }, []);
+
+    return (
+      <ThermalPrinterContext.Provider
+        value={{
+          device,
+          characteristic,
+          status,
+          loading,
+          connectPrinter,
+          setPrinterStatus: setStatus,
+          writePayload,
+        }}
+      >
+        {children}
+      </ThermalPrinterContext.Provider>
+    );
+  }
 type ComponentProps = {
   mode: "print_qr" | "print_order" | "setup_printer";
   qr_object?: string;
@@ -58,10 +202,15 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
   { mode, qr_object, text, isDisabled },
   ref
 ) {
-  const [device, setDevice] = useState<any>(null);
-  const [characteristic, setCharacteristic] = useState<WritableCharacteristic | null>(null);
-  const [status, setStatus] = useState('Disconnected');
-  const [loading, setLoading] = useState(false);
+  const {
+    device,
+    characteristic,
+    status,
+    loading,
+    connectPrinter,
+    setPrinterStatus,
+    writePayload,
+  } = useThermalPrinter();
 
   const FONT_SMALL = new Uint8Array([0x1b, 0x21, 0x01]);
   const TEXT_SIZE_DOUBLE = new Uint8Array([0x1d, 0x21, 0x11]); // 2x Width & 2x Height (Pinaka-bagay sa Title)
@@ -72,49 +221,6 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
   const TEXT_BOLD_OFF = new Uint8Array([0x1b, 0x45, 0x00]); // Bold Off
   const PAPER_FEED = new Uint8Array([0x1b, 0x64, 0x04]); // Feed 4 lines
 
-
-  const connectPrinter = async () => {
-    try {
-      setStatus('Searching for printer...');
-
-      const selectedDevice = await (navigator as any).bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [
-          '000018f0-0000-1000-8000-00805f9b34fb',
-          '0000ff00-0000-1000-8000-00805f9b34fb',
-          '0000e701-0000-1000-8000-00805f9b34fb'
-        ]
-      });
-
-      setStatus('Connecting to GATT Server...');
-      const server = await selectedDevice.gatt.connect();
-
-      const services = await server.getPrimaryServices();
-      let targetCharacteristic: WritableCharacteristic | null = null;
-
-      for (const service of services) {
-        const characteristics = await service.getCharacteristics();
-        for (const char of characteristics) {
-          if (char.properties.write || char.properties.writeWithoutResponse) {
-            targetCharacteristic = char;
-            break;
-          }
-        }
-        if (targetCharacteristic) break;
-      }
-
-      if (!targetCharacteristic) {
-        throw new Error('No writable characteristic found on this printer.');
-      }
-
-      setDevice(selectedDevice);
-      setCharacteristic(targetCharacteristic);
-      setStatus(`Connected to ${selectedDevice.name || 'Thermal Printer'}`);
-    } catch (error) {
-      console.error('Bluetooth Connection Error:', error);
-      setStatus(`Connection Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
 
   const createQrRaster = async (qrImageUrl: string): Promise<Uint8Array> => {
     const image = new Image();
@@ -176,8 +282,7 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
     }
 
     try {
-      setLoading(true);
-      setStatus('Printing QR Code...');
+      setPrinterStatus('Printing QR Code...');
 
       const qrRaster = await createQrRaster(qrImageUrl);
       const encoder = new TextEncoder();
@@ -244,14 +349,12 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         PAPER_FEED,
       ]);
 
-      await writeInChunks(characteristic, payload, 100);
+      await writePayload(payload);
 
-      setStatus('Print Success!');
+      setPrinterStatus('Print Success!');
     } catch (error) {
       console.error('Print Error:', error);
-      setStatus(`Print Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setLoading(false);
+      setPrinterStatus(`Print Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -261,8 +364,7 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
     }
 
     try {
-      setLoading(true);
-      setStatus('Printing order slip...');
+      setPrinterStatus('Printing order slip...');
 
       const encoder = new TextEncoder();
       const divider = '--------------------------------\n';
@@ -367,14 +469,12 @@ const ButtonPrint = forwardRef<OrderPrinterHandle, ComponentProps>(function Butt
         new Uint8Array([0x1b, 0x42, 0x01, 0x0a]), // BEEP ESC B (1 beep, ~0.5 sec)
       ]);
 
-      await writeInChunks(characteristic, payload, 100);
-      setStatus('Print Success!');
+      await writePayload(payload);
+      setPrinterStatus('Print Success!');
     } catch (error) {
       console.error('Order Print Error:', error);
-      setStatus(`Print Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setPrinterStatus(`Print Failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
-    } finally {
-      setLoading(false);
     }
   };
 
