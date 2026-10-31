@@ -141,7 +141,7 @@ export default function CashlessWindow({ amount } : ComponentProps){
                 <div className="w-full flex flex-col items-center">
                     <h3>Scan using GCash, Maya, or any Bank App</h3>
                     <img src={qrCodeUrl} alt="QR Ph Code" style={{ width: '250px', height: '250px' }} />
-                    {testLink && <p>TEST MODE: <a href={testLink} target="_blank">Authorize Payment</a></p>}
+                    {testLink && testLink != "pay-live" && <p>TEST MODE: <a href={testLink} target="_blank">Authorize Payment</a></p>}
                     <p className="text-[10px] font-light">Screen will automatically update or perform manually check.</p>
 
                     <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
