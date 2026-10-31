@@ -9,6 +9,7 @@ export default [
 
     layout("layout/sidebar-layout.tsx", [
         index("routes/terminal-route.tsx"),
+        route("pos", "routes/pos-history-route.tsx"),
         route("pos/menu/:categoryId", "routes/menu-category-route.tsx")
     ]),
 

@@ -5,6 +5,7 @@ import {
   ChevronsUpDown,
   Columns3Cog,
   LogOut,
+  Monitor,
   User,
 } from "lucide-react"
 import { NavLink } from "react-router"
@@ -98,6 +99,11 @@ export function NavUser({
                 <DropdownMenuSeparator />
               </>}
             </DropdownMenuGroup>
+            <DropdownMenuItem render={<NavLink to="/pos" />}>
+              <Monitor />
+              POS
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onSignOut} variant="destructive">
               <LogOut />
               Sign out
