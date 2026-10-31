@@ -19,12 +19,23 @@ import {
     DialogTitle,
 } from "~/components/ui/dialog";
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
+import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
 } from "~/components/ui/select";
+import { Input } from "~/components/ui/input";
 import ButtonPrint, { type OrderPrinterHandle } from "./print-service/thermal-printer";
 
 const VOID_REASONS = [
@@ -48,6 +59,7 @@ function getActionErrorMessage(error: unknown, fallback: string) {
                     .filter((value): value is string => typeof value === "string");
                 if (messages.length > 0) return messages.join(" ");
             }
+
         }
         if (!error.response) return "The service could not be reached. Check your connection and try again.";
     }
@@ -118,6 +130,9 @@ export function MainView({
     const [isActionSubmitting, setIsActionSubmitting] = useState(false);
     const [isReprintingOrder, setIsReprintingOrder] = useState(false);
     const [voidReason, setVoidReason] = useState<string | null>(null);
+    const [isVoidAuthorizationOpen, setIsVoidAuthorizationOpen] = useState(false);
+    const [managerUsername, setManagerUsername] = useState("");
+    const [managerPassword, setManagerPassword] = useState("");
     const [isPayMethodSelectionOpen, setIsPayMethodSelectionOpen] = useState(false);
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
     const [cashReceived, setCashReceived] = useState("");
@@ -146,6 +161,9 @@ export function MainView({
     const handleOrderClick = (order: KitchenOrder) => {
         setSelectedOrder(order);
         setVoidReason(null);
+        setIsVoidAuthorizationOpen(false);
+        setManagerUsername("");
+        setManagerPassword("");
         setIsPayMethodSelectionOpen(false);
         setPaymentMethod(null);
         setCashReceived("");
@@ -163,7 +181,10 @@ export function MainView({
         }
     };
 
-    const handleOrderStatus = async (status: "cooked" | "void") => {
+    const handleOrderStatus = async (
+        status: "cooked" | "void",
+        authorization?: { username: string; password: string }
+    ) => {
         if (!selectedOrder || isActionSubmitting) return;
 
         const reason = VOID_REASONS.find((option) => option.value === voidReason);
@@ -174,10 +195,19 @@ export function MainView({
             await api.patch(`v1/orders/${selectedOrder.orderId}/status`, {
                 status,
                 ...(status === "void" && reason ? { void_reason: Number(reason.value) } : {}),
+                ...(status === "void" && authorization
+                    ? {
+                        manager_username: authorization.username,
+                        manager_password: authorization.password,
+                    }
+                    : {}),
             });
             toast.success(status === "cooked" ? "Order marked as cooked." : "Order voided.");
             setIsDialogOpen(false);
+            setIsVoidAuthorizationOpen(false);
             setVoidReason(null);
+            setManagerUsername("");
+            setManagerPassword("");
             onKitchenOrderUpdated();
         } catch (error) {
             toast.error(getActionErrorMessage(error, "Could not update this order."));
@@ -258,7 +288,10 @@ export function MainView({
     
         <Dialog
             open={isDialogOpen}
-            onOpenChange={setIsDialogOpen}
+            onOpenChange={(open) => {
+                setIsDialogOpen(open);
+                if (!open) setIsVoidAuthorizationOpen(false);
+            }}
         >
             <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto">
                 {selectedOrder && (
@@ -543,9 +576,9 @@ export function MainView({
                                         variant="destructive"
                                         className="w-full"
                                         disabled={!voidReason || isActionSubmitting}
-                                        onClick={() => handleOrderStatus("void")}
+                                        onClick={() => setIsVoidAuthorizationOpen(true)}
                                     >
-                                        {isActionSubmitting ? "Updating order..." : "Void order"}
+                                        Void order
                                     </Button>
                                 </div>
 
@@ -567,6 +600,85 @@ export function MainView({
                 )}
             </DialogContent>
         </Dialog>
+
+        <AlertDialog
+            open={isVoidAuthorizationOpen}
+            onOpenChange={(open) => {
+                if (!isActionSubmitting) setIsVoidAuthorizationOpen(open);
+            }}
+        >
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Manager authorization</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Enter a manager's credentials to void this order.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <form
+                    id="void-authorization"
+                    className="space-y-3"
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        const username = managerUsername.trim();
+                        const password = managerPassword;
+                        if (!username || !password) return;
+                        void handleOrderStatus("void", { username, password });
+                    }}
+                >
+                    <div className="space-y-1.5">
+                        <label htmlFor="manager-username" className="text-sm font-medium">
+                            Username
+                        </label>
+                        <Input
+                            id="manager-username"
+                            value={managerUsername}
+                            onChange={(event) => setManagerUsername(event.target.value)}
+                            autoComplete="username"
+                            placeholder="Manager username"
+                            disabled={isActionSubmitting}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label htmlFor="manager-password" className="text-sm font-medium">
+                            Password
+                        </label>
+                        <Input
+                            id="manager-password"
+                            type="password"
+                            value={managerPassword}
+                            onChange={(event) => setManagerPassword(event.target.value)}
+                            autoComplete="current-password"
+                            placeholder="Manager password"
+                            disabled={isActionSubmitting}
+                        />
+                    </div>
+                </form>
+
+                <AlertDialogFooter>
+                    <AlertDialogCancel
+                        disabled={isActionSubmitting}
+                        onClick={() => {
+                            setManagerUsername("");
+                            setManagerPassword("");
+                        }}
+                    >
+                        Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                        type="submit"
+                        form="void-authorization"
+                        disabled={
+                            isActionSubmitting ||
+                            !managerUsername.trim() ||
+                            !managerPassword
+                        }
+                    >
+                        {isActionSubmitting ? <><Spinner/>Authorizing...</> : "Authorize void"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
 
     </>
 }
