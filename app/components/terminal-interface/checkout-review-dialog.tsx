@@ -199,7 +199,7 @@ export function CheckoutReviewDialog({
                             </DialogDescription>
                         </DialogHeader>
 
-                        <div className="mb-5 rounded-xl border p-3.5 sm:p-4">
+                        <div className="mb-5">
                             <label htmlFor="checkout-voucher" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                 Voucher code
                             </label>
@@ -212,7 +212,7 @@ export function CheckoutReviewDialog({
                                         setVoucherResult(null)
                                     }}
                                     placeholder="Enter voucher code"
-                                    className="h-10 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm uppercase outline-none focus:ring-2 focus:ring-green-600"
+                                    className="min-w-0 flex-1 rounded-md border bg-background px-3 text-sm uppercase outline-none focus:ring-2 focus:ring-green-600"
                                     disabled={voucherFetcher.state !== "idle"}
                                 />
                                 <Button type="button" variant="outline" onClick={applyVoucher} disabled={!voucherCode.trim() || voucherFetcher.state !== "idle"}>
@@ -257,7 +257,7 @@ export function CheckoutReviewDialog({
                             </div>
                         </div>
 
-                        <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border p-3.5">
+                        <label hidden className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border p-3.5">
                             <input
                                 type="checkbox"
                                 checked={payLater}
