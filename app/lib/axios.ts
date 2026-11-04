@@ -26,6 +26,7 @@ const ROOT_ROUTES = [
   "/forgot-password",
   "/reset-password",
   "/two-factor-challenge",
+  "/email/verify",
   "/sanctum/csrf-cookie",
   "user/profile-information",
   "user/password"
@@ -85,9 +86,24 @@ api.interceptors.response.use(
         requestUrl.includes("/login") || 
         requestUrl.includes("/two-factor-challenge");
 
-      if (!isAuthEndpoint && window.location.pathname !== "/login") {
+      const isEmailVerificationFlow =
+        window.location.pathname === "/email-verify" ||
+        window.location.pathname === "/unverified";
+
+      if (!isAuthEndpoint && window.location.pathname !== "/login" && !isEmailVerificationFlow) {
         window.location.href = "/login";
       }
+    }
+
+    // 3. Handle unverified accounts
+    if (
+      status === 409 &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/unverified" &&
+      window.location.pathname !== "/login" &&
+      window.location.pathname !== "/email-verify"
+    ) {
+      window.location.assign("/unverified");
     }
 
     return Promise.reject(error);

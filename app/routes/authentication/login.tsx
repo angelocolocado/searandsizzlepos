@@ -31,6 +31,11 @@ export async function clientAction({ request } : Route.ClientActionArgs){
         toast.info('2FA Enabled')
       }
 
+      const pendingVerifyUrl = sessionStorage.getItem('pending_verify_url')
+      if (pendingVerifyUrl) {
+        return redirect(`/email-verify?verify_url=${encodeURIComponent(pendingVerifyUrl)}`)
+      }
+
       return redirect('/')
 
     } catch (err) {

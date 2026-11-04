@@ -4,6 +4,8 @@ export default [
 
     route("/process-cashless", "routes/cashless/cashless-route.tsx"),
     route("/login", "routes/authentication/login.tsx"),
+    route("/email-verify", "routes/authentication/email-verify.tsx"),
+    route("/unverified", "routes/authentication/unverified.tsx"),
     route("/logout", "routes/authentication/logout.tsx"),
     route("/two-factor-challenge", "routes/authentication/2fa-challenge.tsx"),
 
