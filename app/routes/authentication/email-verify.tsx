@@ -99,7 +99,7 @@ export default function EmailVerify() {
           return;
         }
 
-        if (axios.isAxiosError(error) && error.response?.status === 403) {
+        if (axios.isAxiosError(error) && (error.response?.status === 403 || error.response?.status === 401)) {
           savePendingVerification(verifyUrl);
           setVerification({
             status: "unauthenticated",
