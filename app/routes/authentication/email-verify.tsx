@@ -134,7 +134,12 @@ export default function EmailVerify() {
     return (
       <VerificationCard title="Email verified">
         <CardDescription>{verification.message}</CardDescription>
-        <Button className="mt-5 w-full rounded-sm bg-red-900"><Link to={'/login'}>Log In</Link></Button>
+        <Link
+          to="/login"
+          className={buttonVariants({ className: "mt-5 w-full rounded-sm bg-red-900" })}
+        >
+          Log In
+        </Link>
       </VerificationCard>
     );
   }
