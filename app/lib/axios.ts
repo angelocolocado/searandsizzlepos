@@ -90,7 +90,15 @@ api.interceptors.response.use(
         window.location.pathname === "/email-verify" ||
         window.location.pathname === "/unverified";
 
-      if (!isAuthEndpoint && window.location.pathname !== "/login" && !isEmailVerificationFlow) {
+      const isTwoFactorChallengeFlow =
+        window.location.pathname === "/two-factor-challenge";
+
+      if (
+        !isAuthEndpoint &&
+        window.location.pathname !== "/login" &&
+        !isEmailVerificationFlow &&
+        !isTwoFactorChallengeFlow
+      ) {
         window.location.href = "/login";
       }
     }

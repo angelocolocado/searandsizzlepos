@@ -3,7 +3,6 @@ import type { Route } from "./+types/login";
 import LoginForm from "./login-form";
 import axios from "axios";
 import { redirect } from "react-router";
-import { toast } from "sonner";
 import { useEffect } from "react";
 import LightPillar from "~/components/LightPillar";
 
@@ -28,7 +27,7 @@ export async function clientAction({ request } : Route.ClientActionArgs){
       const response = await api.post('/login', data)
 
       if(response.data.two_factor){
-        toast.info('2FA Enabled')
+        return redirect('/two-factor-challenge')
       }
 
       const pendingVerifyUrl = sessionStorage.getItem('pending_verify_url')
@@ -46,7 +45,7 @@ export async function clientAction({ request } : Route.ClientActionArgs){
           case 429:
             return {error: true, type: "server", message: err.response?.data.message, buster: Date.now()}
         }
-      }
+      } 
     }
 
     return {error: true, type: "form", message: "Server Error", buster: Date.now()}
