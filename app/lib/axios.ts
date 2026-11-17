@@ -29,7 +29,10 @@ const ROOT_ROUTES = [
   "/email/verify",
   "/sanctum/csrf-cookie",
   "/user/profile-information",
-  "/user/password"
+  "/user/password",
+  "/user/passkeys",
+  "/passkeys/login",
+  "/user/confirm-password"
 ];
 
 api.interceptors.request.use(

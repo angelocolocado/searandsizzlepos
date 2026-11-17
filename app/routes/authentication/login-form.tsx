@@ -18,6 +18,8 @@ import { Eye, EyeOff, KeyRound, UserLock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Spinner } from "~/components/ui/spinner";
 import { useNavigation, useSubmit } from "react-router";
+import { initializePasskeyAuth, Passkeys, passkeyRoutes } from "~/lib/passkeys.client";
+import { toast } from "sonner";
 
 const LoginFormSchema = z.object({
     username: z
@@ -49,9 +51,16 @@ export default function LoginForm({ error, message, type, buster } : ComponentPr
     });
 
     const [isPwdShown, setIsPwdShown] = useState(false)
+    const [isPasskeySupported, setIsPasskeySupported] = useState(false)
+    const [isPasskeySubmitting, setIsPasskeySubmitting] = useState(false)
+    const [passkeyError, setPasskeyError] = useState<string | null>(null)
     const submit = useSubmit()
     const navigation = useNavigation()
     const isSubmitting = navigation.state !== "idle"
+
+    useEffect(() => {
+        setIsPasskeySupported(Passkeys.isSupported())
+    }, [])
 
     useEffect(() => {
         if (error && message) {
@@ -69,6 +78,28 @@ export default function LoginForm({ error, message, type, buster } : ComponentPr
         submit(d, {
             method: "POST"
         });
+    }
+
+    async function handlePasskeySignIn() {
+        try {
+            setIsPasskeySubmitting(true)
+            setPasskeyError(null)
+            await initializePasskeyAuth()
+            const response = await Passkeys.verify({
+                remember: true,
+                routes: passkeyRoutes.verify,
+            })
+
+            if (response.redirect) {
+                window.location.assign(response.redirect)
+            }
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Passkey sign-in failed. Please try again."
+            setPasskeyError(message)
+            toast.error(message)
+        } finally {
+            setIsPasskeySubmitting(false)
+        }
     }
 
     return (<>
@@ -128,9 +159,28 @@ export default function LoginForm({ error, message, type, buster } : ComponentPr
                 </form>
             </CardContent>
             <CardFooter>
-                <Button form="login" className="w-full rounded-sm bg-red-900" type="submit" disabled={!isDirty || isSubmitting}>
+                <div className="flex w-full flex-col gap-3">
+                  <Button form="login" className="w-full rounded-sm bg-red-900" type="submit" disabled={!isDirty || isSubmitting || isPasskeySubmitting}>
                     {isSubmitting ? <Spinner /> : 'Sign In'}
-                </Button>
+                  </Button>
+                  {isPasskeySupported && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full rounded-sm"
+                      onClick={handlePasskeySignIn}
+                      disabled={isSubmitting || isPasskeySubmitting}
+                    >
+                      {isPasskeySubmitting ? <Spinner /> : <KeyRound />}
+                      {isPasskeySubmitting ? "Waiting for passkey..." : "Sign in with passkey"}
+                    </Button>
+                  )}
+                  {passkeyError && (
+                    <p role="alert" className="text-sm text-destructive text-center">
+                      {passkeyError}
+                    </p>
+                  )}
+                </div>
             </CardFooter>
         </Card>
     </>)

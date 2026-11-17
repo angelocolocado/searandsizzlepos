@@ -104,6 +104,10 @@ export function NavUser({
               <Monitor />
               POS
             </DropdownMenuItem>
+            <DropdownMenuItem render={<NavLink to="/profile" />}>
+              <User />
+              My profile
+            </DropdownMenuItem>
             <DropdownMenuItem render={<NavLink to="/change-password" />}>
               <KeyRound />
               Change password
