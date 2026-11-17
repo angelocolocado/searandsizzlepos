@@ -4,16 +4,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { MenuCategory, MenuItem } from "~/types/menu-category";
 
 const MenuItemCard = memo(function MenuItemCard({ menu, onSelectMenu }: { menu: MenuItem, onSelectMenu: (menu: MenuItem) => void }) {
+    const isInsufficient = menu.insufficient === true;
 
     const handleClick = () => {
+        if (isInsufficient) return;
         onSelectMenu(menu)
     }
 
     return (
-        <Button onClick={handleClick}>
+        <Button
+            type="button"
+            onClick={handleClick}
+            disabled={isInsufficient}
+            aria-label={`${menu.name}, ${menu.status}${isInsufficient ? ", insufficient inventory" : ""}`}
+        >
             <article
-                aria-label={`${menu.name}, ${menu.status}`}
-                className="flex min-h-[68px] w-[92px] items-center justify-center rounded-sm border bg-background px-2 py-2 text-center text-[13px] leading-4 font-medium shadow-sm"
+                className={`flex min-h-[68px] w-[92px] items-center justify-center rounded-sm border px-2 py-2 text-center text-[13px] leading-4 font-medium shadow-sm ${
+                    isInsufficient
+                        ? "border-red-300 bg-red-100 text-red-700 opacity-70 cursor-not-allowed dark:border-red-900 dark:bg-red-950/60 dark:text-red-300"
+                        : "bg-background"
+                }`}
             >
                 <span className="line-clamp-3">{menu.name}</span>
             </article>

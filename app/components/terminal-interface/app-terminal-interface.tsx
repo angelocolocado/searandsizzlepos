@@ -121,6 +121,8 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     })
 
     const handleSelectMenu = (menu: MenuItem) => {
+        if (menu.insufficient === true) return;
+
         setMenusById((current) => ({ ...current, [menu.id]: menu }));
         setOrder((currentOrder) => {
             const existingLine = currentOrder.find((line) => line.menu_id === menu.id);

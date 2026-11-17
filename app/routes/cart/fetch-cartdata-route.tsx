@@ -13,6 +13,7 @@ function isMenuItem(value: unknown): value is MenuItem {
         typeof menu.selling_price === "number" &&
         (typeof menu.description === "string" || menu.description === null) &&
         typeof menu.status === "string" &&
+        (menu.insufficient === undefined || typeof menu.insufficient === "boolean") &&
         Array.isArray(menu.modifiers) &&
         menu.modifiers.every((modifier: unknown) => {
             if (typeof modifier !== "object" || modifier === null) return false;

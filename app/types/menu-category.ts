@@ -11,6 +11,7 @@ export type MenuItem = {
     selling_price: number;
     description: string | null;
     status: string;
+    insufficient?: boolean;
     modifiers: MenuModifier[];
 };
 
