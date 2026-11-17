@@ -28,8 +28,8 @@ const ROOT_ROUTES = [
   "/two-factor-challenge",
   "/email/verify",
   "/sanctum/csrf-cookie",
-  "user/profile-information",
-  "user/password"
+  "/user/profile-information",
+  "/user/password"
 ];
 
 api.interceptors.request.use(
@@ -61,7 +61,7 @@ api.interceptors.response.use(
     const status = error.response?.status;
 
     // 1. Handle 419 (CSRF Token Mismatch / Session Expired)
-    if (status === 419 && !originalRequest._retry) {
+    if (status === 419 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
 
       try {
@@ -101,6 +101,16 @@ api.interceptors.response.use(
       ) {
         window.location.href = "/login";
       }
+    }
+
+    if (status === 403 && error.response?.data?.must_change_password === true) {
+      if (
+        typeof window !== "undefined" &&
+        window.location.pathname !== "/change-password"
+      ) {
+        window.location.href = "/change-password?required=true";
+      }
+      return Promise.reject(error);
     }
 
     // 3. Handle unverified accounts

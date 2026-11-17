@@ -4,6 +4,7 @@ import {
   BadgeCheck,
   ChevronsUpDown,
   Columns3Cog,
+  KeyRound,
   LogOut,
   Monitor,
   User,
@@ -102,6 +103,10 @@ export function NavUser({
             <DropdownMenuItem render={<NavLink to="/pos" />}>
               <Monitor />
               POS
+            </DropdownMenuItem>
+            <DropdownMenuItem render={<NavLink to="/change-password" />}>
+              <KeyRound />
+              Change password
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onSignOut} variant="destructive">
