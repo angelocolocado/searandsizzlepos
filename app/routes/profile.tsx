@@ -1,7 +1,7 @@
 import axios from "axios"
 import { ServerError } from "@laravel/passkeys"
 import { KeyRound, Pencil, Plus, Trash2, UserLock, UserRound } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useFetcher, useRevalidator } from "react-router"
 
@@ -210,6 +210,11 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
   const isMutating = passkeyFetcher.state !== "idle"
   const isConfirmingPassword = confirmPasswordFetcher.state !== "idle"
   const [lastMutation, setLastMutation] = useState<{ intent: string; id: string; name?: string } | null>(null)
+  const handledPasswordConfirmation = useRef<ProfileActionData | null>(null)
+
+  function openPasswordConfirmation() {
+    setIsConfirmPasswordOpen(true)
+  }
 
   useEffect(() => {
     setPasskeys(loaderData.passkeys)
@@ -241,13 +246,17 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     if (passkeyFetcher.state !== "idle" || passkeyFetcher.data?.code !== 423) return
 
-    setIsConfirmPasswordOpen(true)
+    openPasswordConfirmation()
   }, [passkeyFetcher.data, passkeyFetcher.state])
 
   useEffect(() => {
     if (confirmPasswordFetcher.state !== "idle" || !confirmPasswordFetcher.data) return
 
-    if (confirmPasswordFetcher.data.success) {
+    if (
+      confirmPasswordFetcher.data.success &&
+      handledPasswordConfirmation.current !== confirmPasswordFetcher.data
+    ) {
+      handledPasswordConfirmation.current = confirmPasswordFetcher.data
       setPassword("")
       setIsConfirmPasswordOpen(false)
       revalidator.revalidate()
@@ -283,7 +292,7 @@ export default function Profile({ loaderData }: Route.ComponentProps) {
       toast.success("Passkey added.")
     } catch (error) {
       if (error instanceof ServerError && error.status === 423) {
-        setIsConfirmPasswordOpen(true)
+        openPasswordConfirmation()
         return
       }
 
