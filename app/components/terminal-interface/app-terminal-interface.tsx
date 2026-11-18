@@ -27,6 +27,26 @@ function withoutZeroModifiers(line: StoredOrderLine): StoredOrderLine {
     };
 }
 
+function clampOrderToAvailableQuantity(
+    lines: StoredOrderLine[],
+    menus: MenuItem[]
+): StoredOrderLine[] {
+    const menusById = new Map(menus.map((menu) => [menu.id, menu]));
+
+    return lines.flatMap((line) => {
+        const menu = menusById.get(line.menu_id);
+        if (!menu || menu.insufficient === true || menu.max_quantity <= 0) return [];
+
+        return [{
+            ...withoutZeroModifiers(line),
+            quantity: Math.min(
+                Math.max(1, Math.floor(line.quantity)),
+                Math.floor(menu.max_quantity)
+            ),
+        }];
+    });
+}
+
 export default function TerminalInterface({ menuCategory }: TerminalInterfaceProps){
 
     const kitchenOrdersFetcher = useFetcher<typeof kitchenOrdersClientLoader>();
@@ -54,6 +74,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             ...current,
             ...Object.fromEntries(menus.map((menu) => [menu.id, menu])),
         }));
+        setOrder((current) => clampOrderToAvailableQuantity(current, menus));
     }, [])
 
     useEffect(() => {
@@ -98,6 +119,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                 ...current,
                 ...Object.fromEntries(menus.map((menu) => [menu.id, menu])),
             }));
+            setOrder((current) => clampOrderToAvailableQuantity(current, menus));
         }
     }, [menuCategory])
 
@@ -121,7 +143,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     })
 
     const handleSelectMenu = (menu: MenuItem) => {
-        if (menu.insufficient === true) return;
+        if (menu.insufficient === true || menu.max_quantity <= 0) return;
 
         setMenusById((current) => ({ ...current, [menu.id]: menu }));
         setOrder((currentOrder) => {
@@ -129,7 +151,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             if (existingLine) {
                 return currentOrder.map((line) =>
                     line.menu_id === menu.id
-                        ? { ...line, quantity: line.quantity + 1 }
+                        ? { ...line, quantity: Math.min(line.quantity + 1, menu.max_quantity) }
                         : line
                 );
             }
@@ -140,9 +162,16 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
 
     const updateQuantity = (menuId: string, quantity: number) => {
         setOrder((currentOrder) =>
-            currentOrder.map((line) =>
-                line.menu_id === menuId ? { ...line, quantity } : line
-            )
+            currentOrder.map((line) => {
+                if (line.menu_id !== menuId) return line;
+
+                const menu = menusById[menuId];
+                const maxQuantity = menu?.max_quantity ?? Number.POSITIVE_INFINITY;
+                return {
+                    ...line,
+                    quantity: Math.max(1, Math.min(quantity, maxQuantity)),
+                };
+            })
         )
     }
 

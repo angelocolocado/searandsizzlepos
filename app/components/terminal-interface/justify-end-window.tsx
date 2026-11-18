@@ -66,6 +66,8 @@ function isMenuItem(value: unknown): value is MenuItem {
         typeof menu.selling_price === "number" &&
         (typeof menu.description === "string" || menu.description === null) &&
         typeof menu.status === "string" &&
+        (menu.insufficient === undefined || typeof menu.insufficient === "boolean") &&
+        typeof menu.max_quantity === "number" &&
         Array.isArray(menu.modifiers) &&
         menu.modifiers.every((modifier: unknown) => {
             if (typeof modifier !== "object" || modifier === null) return false;
@@ -501,7 +503,7 @@ export function ProccessOrderPanel({
                         className="rounded-xl border bg-card p-3 shadow-sm"
                     >
                         <div className="flex items-start justify-between gap-2">
-                            <h3 className="min-w-0 flex-1 text-sm font-semibold leading-5">
+                            <h3 className="min-w-0 flex-1 break-words text-sm font-semibold leading-5 [overflow-wrap:anywhere] line-clamp-2">
                                 {line.menu.name}
                             </h3>
                             <p className="shrink-0 rounded-full bg-muted px-2 py-1 text-xs font-semibold tabular-nums">
@@ -528,12 +530,19 @@ export function ProccessOrderPanel({
                                     size="icon-sm"
                                     variant="outline"
                                     aria-label={`Increase ${line.menu.name} quantity`}
+                                    disabled={
+                                        line.menu.insufficient === true ||
+                                        line.quantity >= line.menu.max_quantity
+                                    }
                                     onClick={() => onQuantityChange(line.menuId, line.quantity + 1)}
                                 >
                                     <Plus />
                                 </Button>
                                 <span className="ml-1 text-[10px] text-muted-foreground">QTY</span>
                             </div>
+                            <span className="text-xs font-medium text-muted-foreground">
+                                {Math.max(0, line.menu.max_quantity - line.quantity)} left
+                            </span>
                             <div className="flex items-center gap-1">
                                 <Button
                                     type="button"

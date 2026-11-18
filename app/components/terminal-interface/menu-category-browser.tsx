@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { MenuCategory, MenuItem } from "~/types/menu-category";
 
 const MenuItemCard = memo(function MenuItemCard({ menu, onSelectMenu }: { menu: MenuItem, onSelectMenu: (menu: MenuItem) => void }) {
-    const isInsufficient = menu.insufficient === true;
+    const isInsufficient = menu.insufficient === true || menu.max_quantity <= 0;
 
     const handleClick = () => {
         if (isInsufficient) return;

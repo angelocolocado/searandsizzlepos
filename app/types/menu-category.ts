@@ -12,6 +12,7 @@ export type MenuItem = {
     description: string | null;
     status: string;
     insufficient?: boolean;
+    max_quantity: number;
     modifiers: MenuModifier[];
 };
 

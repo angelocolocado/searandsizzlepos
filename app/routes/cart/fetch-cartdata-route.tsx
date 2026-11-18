@@ -14,6 +14,7 @@ function isMenuItem(value: unknown): value is MenuItem {
         (typeof menu.description === "string" || menu.description === null) &&
         typeof menu.status === "string" &&
         (menu.insufficient === undefined || typeof menu.insufficient === "boolean") &&
+        typeof menu.max_quantity === "number" &&
         Array.isArray(menu.modifiers) &&
         menu.modifiers.every((modifier: unknown) => {
             if (typeof modifier !== "object" || modifier === null) return false;
