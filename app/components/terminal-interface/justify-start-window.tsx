@@ -293,7 +293,7 @@ export function MainView({
                 if (!open) setIsVoidAuthorizationOpen(false);
             }}
         >
-            <DialogContent className="max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto">
+            <DialogContent className="grid-cols-1 min-w-0 max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto">
                 {selectedOrder && (
                     <>
                         <DialogHeader className="gap-2">
@@ -335,7 +335,9 @@ export function MainView({
                                         >
                                             <div className="flex items-start justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <span className="text-sm font-medium">{item.name}</span>
+                                                    <span className="block min-w-0 break-words text-sm font-medium [overflow-wrap:anywhere]">
+                                                        {item.name}
+                                                    </span>
                                                     {item.unitPrice !== undefined && (
                                                         <p className="mt-1 text-xs text-muted-foreground tabular-nums">
                                                             {formatPayment(item.unitPrice)} each
