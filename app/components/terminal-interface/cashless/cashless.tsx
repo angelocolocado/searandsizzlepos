@@ -6,7 +6,6 @@ import { Spinner } from "~/components/ui/spinner";
 import { echo } from "~/lib/echo";
 import { CART_STORAGE_KEY } from "~/lib/order-cart-storage";
 import { AnimatedCheckmark } from "~/components/animations/checkmark";
-import ButtonPrint from "../print-service/thermal-printer";
 
 type ComponentProps = {
     amount: number
@@ -145,9 +144,8 @@ export default function CashlessWindow({ amount } : ComponentProps){
                     <p className="text-[10px] font-light">Screen will automatically update or perform manually check.</p>
 
                     <div className="mt-5 flex w-full flex-wrap items-center justify-center gap-2">
-                        <ButtonPrint mode="print_qr" text="Print QR" isDisabled={isLoading} qr_object={qrCodeUrl} />
-                        <Button disabled={isLoading} className="bg-green-900 text-white hover:bg-green-700">
-                            {isLoading ? <><Spinner /> Generating QR</> : <><RotateCcw /> Manual Check</>}
+                        <Button hidden disabled={isLoading} className="bg-green-900 text-white hover:bg-green-700">
+                            {isLoading && <><Spinner /> Generating QR</>}
                         </Button>
                     </div>
                 </div>
