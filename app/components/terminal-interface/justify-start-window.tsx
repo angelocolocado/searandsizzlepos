@@ -103,6 +103,8 @@ type ComponentProp = {
     handleProccessPanelToggle: () => void
     isProccessPanelOpen: boolean
     menuCategory?: MenuCategory
+    menuItems: MenuItem[]
+    isMenuCatalogLoading: boolean
     orders: KitchenOrder[]
     ordersError: string | null
     ordersLoading: boolean
@@ -116,6 +118,8 @@ export function MainView({
     handleProccessPanelToggle,
     isProccessPanelOpen,
     menuCategory,
+    menuItems,
+    isMenuCatalogLoading,
     orders,
     ordersError,
     ordersLoading,
@@ -138,7 +142,7 @@ export function MainView({
     const [cashReceived, setCashReceived] = useState("");
     const cashReceivedAmount = Number(cashReceived || 0);
     const selectedOrderPricing = selectedOrder
-        ? getKitchenOrderPricing(selectedOrder, menuCategory)
+        ? getKitchenOrderPricing(selectedOrder, menuItems)
         : null;
     const totalPayment = selectedOrderPricing?.totalAmount ?? null;
     const changeDue = totalPayment === null
@@ -389,7 +393,11 @@ export function MainView({
                         <div className="flex items-center justify-between gap-3 rounded-lg bg-orange-50 px-4 py-3 dark:bg-orange-950/30">
                             <span className="text-sm font-medium">Total payment</span>
                             <span className="text-base font-bold tabular-nums text-orange-800 dark:text-orange-300">
-                                {totalPayment === null ? "Price unavailable" : formatPayment(totalPayment)}
+                                {totalPayment !== null
+                                    ? formatPayment(totalPayment)
+                                    : isMenuCatalogLoading
+                                        ? "Loading menu prices..."
+                                        : "Price unavailable"}
                             </span>
                         </div>
 

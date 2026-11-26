@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import type { KitchenOrder, MenuCategory, MenuItem, OrderLine } from "~/types/menu-category";
 import { toast } from "sonner";
+import api from "~/lib/axios";
 import type { clientLoader as kitchenOrdersClientLoader } from "~/routes/kitchen-orders-route";
 import {
     CART_STORAGE_KEY,
@@ -16,6 +17,32 @@ import type { OrderPrinterHandle } from "./print-service/thermal-printer";
 
 type TerminalInterfaceProps = {
     menuCategory?: MenuCategory;
+}
+
+type MenuCategorySummary = {
+    id: number;
+}
+
+function parseMenuCategorySummaries(value: unknown): MenuCategorySummary[] {
+    if (!Array.isArray(value)) {
+        throw new Error("Backend returned an invalid menu categories response.");
+    }
+
+    return value.map((category: unknown) => {
+        if (
+            typeof category !== "object" ||
+            category === null ||
+            !("id" in category) ||
+            typeof category.id !== "number"
+        ) {
+            throw new Error("Backend returned an invalid menu categories response.");
+        }
+        return { id: category.id };
+    });
+}
+
+function getCategoryMenus(category: MenuCategory): MenuItem[] {
+    return category.recipe_categories.flatMap((recipeCategory) => recipeCategory.menus);
 }
 
 function withoutZeroModifiers(line: StoredOrderLine): StoredOrderLine {
@@ -55,6 +82,8 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     const [order, setOrder] = useState<StoredOrderLine[]>([])
     const [cartUuid, setCartUuid] = useState("")
     const [menusById, setMenusById] = useState<Record<string, MenuItem>>({})
+    const [menuCatalog, setMenuCatalog] = useState<Record<string, MenuItem>>({})
+    const [isMenuCatalogLoading, setIsMenuCatalogLoading] = useState(true)
     const [isCartLoaded, setIsCartLoaded] = useState(false)
     const [cartError, setCartError] = useState<string | null>(null)
     const [kitchenOrdersRefreshKey, setKitchenOrdersRefreshKey] = useState(0)
@@ -68,6 +97,61 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         const interval = window.setInterval(loadKitchenOrders, 30_000);
         return () => window.clearInterval(interval);
     }, [loadKitchenOrders, kitchenOrdersRefreshKey])
+
+    useEffect(() => {
+        let isActive = true;
+
+        const loadMenuCatalog = async () => {
+            try {
+                const categoriesResponse = await api.get<unknown>("/v1/menu-categories");
+                const categories = parseMenuCategorySummaries(categoriesResponse.data);
+
+                const categoryResults = await Promise.allSettled(
+                    categories.map(({ id }) =>
+                        api.get<MenuCategory>(`/v1/menu-categories/${id}`)
+                    )
+                );
+                const loadedMenus = categoryResults.flatMap((result) =>
+                    result.status === "fulfilled"
+                        ? getCategoryMenus(result.value.data)
+                        : []
+                );
+                const failedCategories = categoryResults.filter(
+                    (result) => result.status === "rejected"
+                ).length;
+
+                if (isActive) {
+                    setMenuCatalog((current) => ({
+                        ...current,
+                        ...Object.fromEntries(loadedMenus.map((menu) => [menu.id, menu])),
+                    }));
+                    if (failedCategories > 0) {
+                        categoryResults.forEach((result, index) => {
+                            if (result.status === "rejected") {
+                                console.error(
+                                    `Failed to load menu category ${categories[index].id} for order pricing.`,
+                                    result.reason
+                                );
+                            }
+                        });
+                        toast.error("Some menu prices could not be loaded.");
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to load the menu catalog for order pricing.", error);
+                if (isActive) {
+                    toast.error("Menu prices could not be loaded. Try refreshing the page.");
+                }
+            } finally {
+                if (isActive) setIsMenuCatalogLoading(false);
+            }
+        };
+
+        void loadMenuCatalog();
+        return () => {
+            isActive = false;
+        };
+    }, []);
 
     const handleMenusLoaded = useCallback((menus: MenuItem[]) => {
         setMenusById((current) => ({
@@ -110,12 +194,14 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
     }, [order, cartUuid, cartError, isCartLoaded])
 
     useEffect(() => {
-        const menus = menuCategory?.recipe_categories.flatMap(
-            (recipeCategory) => recipeCategory.menus
-        ) ?? [];
+        const menus = menuCategory ? getCategoryMenus(menuCategory) : [];
 
         if (menus.length > 0) {
             setMenusById((current) => ({
+                ...current,
+                ...Object.fromEntries(menus.map((menu) => [menu.id, menu])),
+            }));
+            setMenuCatalog((current) => ({
                 ...current,
                 ...Object.fromEntries(menus.map((menu) => [menu.id, menu])),
             }));
@@ -242,7 +328,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             if (!printer) {
                 throw new Error("Order printer is unavailable. Connect it before reprinting.");
             }
-            const pricing = getKitchenOrderPricing(orderToReprint, menuCategory);
+            const pricing = getKitchenOrderPricing(orderToReprint, Object.values(menuCatalog));
 
             await printer.handleReprintOrder({
                 orderNumber: orderToReprint.orderNumber,
@@ -269,7 +355,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     : "Could not reprint the order."
             );
         }
-    }, [menuCategory]);
+    }, [menuCatalog]);
 
     const kitchenOrders = kitchenOrdersFetcher.data &&
         "orders" in kitchenOrdersFetcher.data &&
@@ -290,6 +376,8 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     handleProccessPanelToggle={() => setIsPrcOrderPanelOpen(true)}
                     isProccessPanelOpen={isPrcOrderPanelOpen}
                     menuCategory={menuCategory}
+                    menuItems={Object.values(menuCatalog)}
+                    isMenuCatalogLoading={isMenuCatalogLoading}
                     orders={kitchenOrders}
                     ordersError={kitchenOrdersError}
                     ordersLoading={kitchenOrdersFetcher.state !== "idle"}

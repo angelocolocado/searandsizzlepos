@@ -1,12 +1,11 @@
-import type { KitchenOrder, MenuCategory } from "~/types/menu-category";
+import type { KitchenOrder, MenuItem } from "~/types/menu-category";
 
 export type PricedKitchenOrderItem = KitchenOrder["order"][number];
 
 export function getKitchenOrderPricing(
     order: KitchenOrder,
-    menuCategory?: MenuCategory
+    menus: MenuItem[]
 ): { items: PricedKitchenOrderItem[]; totalAmount: number | undefined } {
-    const menus = menuCategory?.recipe_categories.flatMap((category) => category.menus) ?? [];
     const items = order.order.map((item) => {
         const menu = menus.find(
             (candidate) => candidate.name.toLocaleLowerCase() === item.name.toLocaleLowerCase()
