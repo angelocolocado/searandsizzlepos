@@ -251,6 +251,9 @@ export function MainView({
         <Header
             handleProccessPanelToggle={handleProccessPanelToggle}
             isProccessPanelOpen={isProccessPanelOpen}
+            menuItems={menuItems}
+            isMenuCatalogLoading={isMenuCatalogLoading}
+            onSelectMenu={onSelectMenu}
         />
 
         <main className="scrollbar-thin scrollbar-track-slate-100 scrollbar-thumb-amber-500 hover:scrollbar-thumb-amber-600 scrollbar-gutter-stable min-w-0 px-5 py-4 sm:px-7">

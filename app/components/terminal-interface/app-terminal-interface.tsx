@@ -1,6 +1,6 @@
 import { ProccessOrderPanel } from "./justify-end-window";
 import { MainView } from "./justify-start-window";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import type { KitchenOrder, MenuCategory, MenuItem, OrderLine } from "~/types/menu-category";
 import { toast } from "sonner";
@@ -232,6 +232,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         if (menu.insufficient === true || menu.max_quantity <= 0) return;
 
         setMenusById((current) => ({ ...current, [menu.id]: menu }));
+        setMenuCatalog((current) => ({ ...current, [menu.id]: menu }));
         setOrder((currentOrder) => {
             const existingLine = currentOrder.find((line) => line.menu_id === menu.id);
             if (existingLine) {
@@ -245,6 +246,8 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
         })
         setIsPrcOrderPanelOpen(true)
     }
+
+    const menuItems = useMemo(() => Object.values(menuCatalog), [menuCatalog]);
 
     const updateQuantity = (menuId: string, quantity: number) => {
         setOrder((currentOrder) =>
@@ -328,7 +331,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
             if (!printer) {
                 throw new Error("Order printer is unavailable. Connect it before reprinting.");
             }
-            const pricing = getKitchenOrderPricing(orderToReprint, Object.values(menuCatalog));
+            const pricing = getKitchenOrderPricing(orderToReprint, menuItems);
 
             await printer.handleReprintOrder({
                 orderNumber: orderToReprint.orderNumber,
@@ -355,7 +358,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     : "Could not reprint the order."
             );
         }
-    }, [menuCatalog]);
+    }, [menuItems]);
 
     const kitchenOrders = kitchenOrdersFetcher.data &&
         "orders" in kitchenOrdersFetcher.data &&
@@ -376,7 +379,7 @@ export default function TerminalInterface({ menuCategory }: TerminalInterfacePro
                     handleProccessPanelToggle={() => setIsPrcOrderPanelOpen(true)}
                     isProccessPanelOpen={isPrcOrderPanelOpen}
                     menuCategory={menuCategory}
-                    menuItems={Object.values(menuCatalog)}
+                    menuItems={menuItems}
                     isMenuCatalogLoading={isMenuCatalogLoading}
                     orders={kitchenOrders}
                     ordersError={kitchenOrdersError}

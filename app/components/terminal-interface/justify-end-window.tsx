@@ -24,6 +24,7 @@ import type { CheckoutCartLine, CheckoutSuccessResponse, MenuItem } from "~/type
 import type { clientAction } from "~/routes/cart/fetch-cartdata-route";
 import type { clientAction as checkoutClientAction } from "~/routes/checkout/checkout-route";
 import { CheckoutReviewDialog } from "./checkout-review-dialog";
+import { isMenuItem } from "~/lib/menu-item-validation";
 import {
     CART_STORAGE_KEY,
     createCartUuid,
@@ -53,32 +54,6 @@ function isCheckoutCartLine(value: unknown): value is CheckoutCartLine {
                         modifier.quantity >= 0
                     );
                 })))
-    );
-}
-
-function isMenuItem(value: unknown): value is MenuItem {
-    if (typeof value !== "object" || value === null) return false;
-
-    const menu = value as Record<string, unknown>;
-    return (
-        typeof menu.id === "string" &&
-        typeof menu.name === "string" &&
-        typeof menu.selling_price === "number" &&
-        (typeof menu.description === "string" || menu.description === null) &&
-        typeof menu.status === "string" &&
-        (menu.insufficient === undefined || typeof menu.insufficient === "boolean") &&
-        typeof menu.max_quantity === "number" &&
-        Array.isArray(menu.modifiers) &&
-        menu.modifiers.every((modifier: unknown) => {
-            if (typeof modifier !== "object" || modifier === null) return false;
-            const item = modifier as Record<string, unknown>;
-            return (
-                typeof item.id === "string" &&
-                typeof item.name === "string" &&
-                typeof item.price === "number" &&
-                typeof item.category === "string"
-            );
-        })
     );
 }
 
